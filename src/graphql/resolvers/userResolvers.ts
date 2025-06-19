@@ -1,0 +1,408 @@
+import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
+import { query } from '../../config/db';
+import { GraphQLError } from 'graphql';
+
+// Custom error classes for Apollo Server v4
+class AuthenticationError extends GraphQLError {
+  constructor(message: string) {
+    super(message, {
+      extensions: {
+        code: 'UNAUTHENTICATED',
+      },
+    });
+  }
+}
+
+class UserInputError extends GraphQLError {
+  constructor(message: string) {
+    super(message, {
+      extensions: {
+        code: 'BAD_USER_INPUT',
+      },
+    });
+  }
+}
+
+class ForbiddenError extends GraphQLError {
+  constructor(message: string) {
+    super(message, {
+      extensions: {
+        code: 'FORBIDDEN',
+      },
+    });
+  }
+}
+
+interface Usuario {
+  id: string;
+  nombre_usuario: string;
+  correo_electronico: string;
+  nombre_completo?: string;
+  puntos: number;
+  creado_el: string;
+}
+
+interface CrearUsuarioInput {
+  nombre_usuario: string;
+  correo_electronico: string;
+  contrasena: string;
+  nombre_completo?: string;
+}
+
+interface ActualizarUsuarioInput {
+  nombre_usuario?: string;
+  correo_electronico?: string;
+  nombre_completo?: string;
+  puntos?: number;
+}
+
+interface LoginInput {
+  correo_electronico: string;
+  contrasena: string;
+}
+
+interface Context {
+  token?: string;
+  usuario?: Usuario;
+}
+
+// Función para generar JWT
+const generateToken = (usuario: Usuario): string => {
+  return jwt.sign(
+    { 
+      id: usuario.id, 
+      correo_electronico: usuario.correo_electronico 
+    },
+    process.env.JWT_SECRET || 'tu-secreto-jwt',
+    { expiresIn: '7d' }
+  );
+};
+
+// Función para verificar JWT
+const verifyToken = (token: string): any => {
+  try {
+    return jwt.verify(token.replace('Bearer ', ''), process.env.JWT_SECRET || 'tu-secreto-jwt');
+  } catch (error) {
+    throw new AuthenticationError('Token inválido');
+  }
+};
+
+// Función para obtener usuario del contexto
+const getUsuarioFromContext = async (context: Context): Promise<Usuario> => {
+  if (!context.token) {
+    throw new AuthenticationError('Token requerido');
+  }
+  
+  const decoded = verifyToken(context.token);
+  const usuarios = await query(
+    'SELECT id, nombre_usuario, correo_electronico, nombre_completo, puntos, creado_el FROM usuarios WHERE id = ?',
+    [decoded.id]
+  ) as Usuario[];
+  
+  if (!usuarios.length) {
+    throw new AuthenticationError('Usuario no encontrado');
+  }
+  
+  return usuarios[0];
+};
+
+export const userResolvers = {
+  Query: {
+    // Obtener todos los usuarios
+    usuarios: async (): Promise<Usuario[]> => {
+      try {
+        const usuarios = await query(
+          'SELECT id, nombre_usuario, correo_electronico, nombre_completo, puntos, creado_el FROM usuarios ORDER BY creado_el DESC'
+        ) as Usuario[];
+        return usuarios;
+      } catch (error) {
+        throw new Error('Error al obtener usuarios');
+      }
+    },
+
+    // Obtener un usuario por ID
+    usuario: async (_: any, { id }: { id: string }): Promise<Usuario | null> => {
+      try {
+        const usuarios = await query(
+          'SELECT id, nombre_usuario, correo_electronico, nombre_completo, puntos, creado_el FROM usuarios WHERE id = ?',
+          [id]
+        ) as Usuario[];
+        return usuarios.length ? usuarios[0] : null;
+      } catch (error) {
+        throw new Error('Error al obtener usuario');
+      }
+    },
+
+    // Obtener usuario por email
+    usuarioPorEmail: async (_: any, { correo_electronico }: { correo_electronico: string }): Promise<Usuario | null> => {
+      try {
+        const usuarios = await query(
+          'SELECT id, nombre_usuario, correo_electronico, nombre_completo, puntos, creado_el FROM usuarios WHERE correo_electronico = ?',
+          [correo_electronico]
+        ) as Usuario[];
+        return usuarios.length ? usuarios[0] : null;
+      } catch (error) {
+        throw new Error('Error al obtener usuario por email');
+      }
+    },
+
+    // Obtener el usuario actual (autenticado)
+    me: async (_: any, __: any, context: Context): Promise<Usuario> => {
+      return await getUsuarioFromContext(context);
+    },
+  },
+
+  Mutation: {
+    // Crear un nuevo usuario
+    crearUsuario: async (_: any, { input }: { input: CrearUsuarioInput }): Promise<Usuario> => {
+      try {
+        // Verificar si el usuario ya existe
+        const usuarioExistente = await query(
+          'SELECT id FROM usuarios WHERE correo_electronico = ? OR nombre_usuario = ?',
+          [input.correo_electronico, input.nombre_usuario]
+        ) as any[];
+
+        if (usuarioExistente.length > 0) {
+          throw new UserInputError('El usuario o email ya existe');
+        }
+
+        // Hash de la contraseña
+        const contrasenaHash = await bcrypt.hash(input.contrasena, 12);
+
+        // Insertar nuevo usuario
+        const resultado = await query(
+          `INSERT INTO usuarios (nombre_usuario, correo_electronico, contrasena_hash, nombre_completo, puntos) 
+           VALUES (?, ?, ?, ?, 0)`,
+          [input.nombre_usuario, input.correo_electronico, contrasenaHash, input.nombre_completo || null]
+        ) as any;
+
+        // Obtener el usuario creado
+        const usuarios = await query(
+          'SELECT id, nombre_usuario, correo_electronico, nombre_completo, puntos, creado_el FROM usuarios WHERE id = ?',
+          [resultado.insertId]
+        ) as Usuario[];
+
+        return usuarios[0];
+      } catch (error) {
+        if (error instanceof UserInputError) {
+          throw error;
+        }
+        throw new Error('Error al crear usuario');
+      }
+    },
+
+    // Actualizar un usuario existente
+    actualizarUsuario: async (_: any, { id, input }: { id: string; input: ActualizarUsuarioInput }, context: Context): Promise<Usuario> => {
+      try {
+        const usuarioActual = await getUsuarioFromContext(context);
+        
+        // Solo el propio usuario puede actualizarse (o implementar roles de admin)
+        if (usuarioActual.id.toString() !== id.toString()) {
+          throw new ForbiddenError('No tienes permisos para actualizar este usuario');
+        }
+
+        // Verificar que el usuario a actualizar existe
+        const usuarioExistente = await query(
+          'SELECT id FROM usuarios WHERE id = ?',
+          [id]
+        ) as any[];
+
+        if (usuarioExistente.length === 0) {
+          throw new UserInputError('Usuario no encontrado');
+        }
+
+        // Verificar si el nuevo nombre de usuario o email ya existen (si se están actualizando)
+        if (input.nombre_usuario || input.correo_electronico) {
+          const condiciones: string[] = [];
+          const parametros: any[] = [];
+          
+          if (input.nombre_usuario) {
+            condiciones.push('nombre_usuario = ?');
+            parametros.push(input.nombre_usuario);
+          }
+          if (input.correo_electronico) {
+            condiciones.push('correo_electronico = ?');
+            parametros.push(input.correo_electronico);
+          }
+          
+          parametros.push(id);
+          
+          const conflictos = await query(
+            `SELECT id FROM usuarios WHERE (${condiciones.join(' OR ')}) AND id != ?`,
+            parametros
+          ) as any[];
+
+          if (conflictos.length > 0) {
+            throw new UserInputError('El nombre de usuario o email ya están en uso');
+          }
+        }
+
+        // Construir query dinámicamente
+        const campos: string[] = [];
+        const valores: any[] = [];
+        
+        if (input.nombre_usuario) {
+          campos.push('nombre_usuario = ?');
+          valores.push(input.nombre_usuario);
+        }
+        if (input.correo_electronico) {
+          campos.push('correo_electronico = ?');
+          valores.push(input.correo_electronico);
+        }
+        if (input.nombre_completo !== undefined) {
+          campos.push('nombre_completo = ?');
+          valores.push(input.nombre_completo);
+        }
+        if (input.puntos !== undefined) {
+          campos.push('puntos = ?');
+          valores.push(input.puntos);
+        }
+
+        if (campos.length === 0) {
+          throw new UserInputError('No hay campos para actualizar');
+        }
+
+        valores.push(id);
+
+        const resultado = await query(
+          `UPDATE usuarios SET ${campos.join(', ')} WHERE id = ?`,
+          valores
+        ) as any;
+
+        if (resultado.affectedRows === 0) {
+          throw new Error('No se pudo actualizar el usuario');
+        }
+
+        // Obtener el usuario actualizado
+        const usuarios = await query(
+          'SELECT id, nombre_usuario, correo_electronico, nombre_completo, puntos, creado_el FROM usuarios WHERE id = ?',
+          [id]
+        ) as Usuario[];
+
+        if (usuarios.length === 0) {
+          throw new Error('Error al obtener el usuario actualizado');
+        }
+
+        return usuarios[0];
+      } catch (error) {
+        if (error instanceof ForbiddenError || error instanceof UserInputError) {
+          throw error;
+        }
+        console.error('Error en actualizarUsuario:', error);
+        throw new Error('Error al actualizar usuario');
+      }
+    },
+
+    // Eliminar un usuario
+    eliminarUsuario: async (_: any, { id }: { id: string }, context: Context): Promise<boolean> => {
+      try {
+        const usuarioActual = await getUsuarioFromContext(context);
+        
+        // Solo el propio usuario puede eliminarse (o implementar roles de admin)
+        if (usuarioActual.id !== id) {
+          throw new ForbiddenError('No tienes permisos para eliminar este usuario');
+        }
+
+        const resultado = await query(
+          'DELETE FROM usuarios WHERE id = ?',
+          [id]
+        ) as any;
+
+        return resultado.affectedRows > 0;
+      } catch (error) {
+        if (error instanceof ForbiddenError) {
+          throw error;
+        }
+        throw new Error('Error al eliminar usuario');
+      }
+    },
+
+    // Login de usuario
+    login: async (_: any, { input }: { input: LoginInput }): Promise<{ token: string; usuario: Usuario }> => {
+      try {
+        // Buscar usuario por email
+        const usuarios = await query(
+          'SELECT id, nombre_usuario, correo_electronico, contrasena_hash, nombre_completo, puntos, creado_el FROM usuarios WHERE correo_electronico = ?',
+          [input.correo_electronico]
+        ) as any[];
+
+        if (!usuarios.length) {
+          throw new AuthenticationError('Credenciales inválidas');
+        }
+
+        const usuario = usuarios[0];
+
+        // Verificar contraseña
+        const contrasenaValida = await bcrypt.compare(input.contrasena, usuario.contrasena_hash);
+        if (!contrasenaValida) {
+          throw new AuthenticationError('Credenciales inválidas');
+        }
+
+        // Generar token
+        const token = generateToken(usuario);
+
+        // Remover hash de contraseña del objeto usuario
+        const { contrasena_hash, ...usuarioSinHash } = usuario;
+
+        return {
+          token,
+          usuario: usuarioSinHash
+        };
+      } catch (error) {
+        if (error instanceof AuthenticationError) {
+          throw error;
+        }
+        throw new Error('Error en el login');
+      }
+    },
+
+    // Cambiar contraseña
+    cambiarContrasena: async (
+      _: any, 
+      { id, contrasenaActual, nuevaContrasena }: { id: string; contrasenaActual: string; nuevaContrasena: string }, 
+      context: Context
+    ): Promise<boolean> => {
+      try {
+        const usuarioActual = await getUsuarioFromContext(context);
+        
+        // Solo el propio usuario puede cambiar su contraseña
+        if (usuarioActual.id !== id) {
+          throw new ForbiddenError('No tienes permisos para cambiar esta contraseña');
+        }
+
+        // Obtener hash actual
+        const usuarios = await query(
+          'SELECT contrasena_hash FROM usuarios WHERE id = ?',
+          [id]
+        ) as any[];
+
+        if (!usuarios.length) {
+          throw new Error('Usuario no encontrado');
+        }
+
+        // Verificar contraseña actual
+        const contrasenaValida = await bcrypt.compare(contrasenaActual, usuarios[0].contrasena_hash);
+        if (!contrasenaValida) {
+          throw new AuthenticationError('Contraseña actual incorrecta');
+        }
+
+        // Hash de la nueva contraseña
+        const nuevoHash = await bcrypt.hash(nuevaContrasena, 12);
+
+        // Actualizar contraseña
+        const resultado = await query(
+          'UPDATE usuarios SET contrasena_hash = ? WHERE id = ?',
+          [nuevoHash, id]
+        ) as any;
+
+        return resultado.affectedRows > 0;
+      } catch (error) {
+        if (error instanceof ForbiddenError || error instanceof AuthenticationError) {
+          throw error;
+        }
+        throw new Error('Error al cambiar contraseña');
+      }
+    },
+  },
+};
