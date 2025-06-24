@@ -5,6 +5,7 @@ export const tareaTypeDefs = gql`
     id: ID!
     categoria: Categoria!
     nivel: Nivel!
+    titulo: String!
     descripcion: String!
     fechaVencimiento: String
     prioridad: Int
@@ -12,27 +13,35 @@ export const tareaTypeDefs = gql`
     tiempoFinalizacionId: ID
     puntosBase: Int
     puntosBonus: Int!
+    codigoBase: String
+    resultadoEsperado: String
   }
 
   input CrearTareaInput {
     categoriaId: ID!
     nivelId: ID!
+    titulo: String!
     descripcion: String!
     fechaVencimiento: String
     prioridad: Int
     puntosBase: Int
     tiempoFinalizacionId: ID
+    codigoBase: String
+    resultadoEsperado: String
   }
 
   input ActualizarTareaInput {
     categoriaId: ID
     nivelId: ID
+    titulo: String
     descripcion: String
     fechaVencimiento: String
     prioridad: Int
     completado: Boolean
     puntosBase: Int
     tiempoFinalizacionId: ID
+    codigoBase: String
+    resultadoEsperado: String
   }
 
   input FiltroTareasInput {

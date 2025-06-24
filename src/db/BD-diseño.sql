@@ -128,3 +128,11 @@ CREATE TABLE insignias_usuarios (
     FOREIGN KEY (usuario_id) REFERENCES usuarios(id),
     FOREIGN KEY (insignia_id) REFERENCES insignias(id)
 );
+
+ALTER TABLE tareas 
+ADD COLUMN codigo_base TEXT COMMENT 'Código base/plantilla para el ejercicio',
+ADD COLUMN resultado_esperado TEXT COMMENT 'Resultado esperado que debe mostrar el código al ejecutarse';
+
+ALTER TABLE tareas 
+ADD COLUMN titulo VARCHAR(255) NOT NULL DEFAULT '' COMMENT 'Título descriptivo del ejercicio';
+

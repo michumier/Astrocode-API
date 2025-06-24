@@ -31,22 +31,28 @@ interface Context {
 interface CrearTareaInput {
   categoriaId: string;
   nivelId: string;
+  titulo: string;
   descripcion: string;
   fechaVencimiento?: string;
   prioridad?: number;
   puntosBase?: number;
   tiempoFinalizacionId?: string;
+  codigoBase?: string;
+  resultadoEsperado?: string;
 }
 
 interface ActualizarTareaInput {
   categoriaId?: string;
   nivelId?: string;
+  titulo?: string;
   descripcion?: string;
   fechaVencimiento?: string;
   prioridad?: number;
   completado?: boolean;
   puntosBase?: number;
   tiempoFinalizacionId?: string;
+  codigoBase?: string;
+  resultadoEsperado?: string;
 }
 
 interface FiltroTareasInput {
@@ -65,7 +71,14 @@ export const tareaResolvers = {
           'SELECT id, nombre FROM categorias WHERE id = ?',
           [parent.categoria_id]
         ) as any[];
-        return result[0];
+        const tarea = result[0];
+         return {
+           ...tarea,
+           puntosBase: tarea.puntos_base,
+           puntosBonus: tarea.puntos_bonus,
+           codigoBase: tarea.codigo_base,
+           resultadoEsperado: tarea.resultado_esperado
+         };
       } catch (error) {
         console.error('Error al obtener categoría de tarea:', error);
         throw new Error('Error interno del servidor');
@@ -79,7 +92,14 @@ export const tareaResolvers = {
           'SELECT id, nombre, puntos FROM niveles WHERE id = ?',
           [parent.nivel_id]
         ) as any[];
-        return result[0];
+        const tarea = result[0];
+         return {
+           ...tarea,
+           puntosBase: tarea.puntos_base,
+           puntosBonus: tarea.puntos_bonus,
+           codigoBase: tarea.codigo_base,
+           resultadoEsperado: tarea.resultado_esperado
+         };
       } catch (error) {
         console.error('Error al obtener nivel de tarea:', error);
         throw new Error('Error interno del servidor');
@@ -92,9 +112,10 @@ export const tareaResolvers = {
     tareas: async (_: any, { filtro }: { filtro?: FiltroTareasInput }) => {
       try {
         let sqlQuery = `
-          SELECT t.id, t.categoria_id, t.nivel_id, t.descripcion, 
+          SELECT t.id, t.categoria_id, t.nivel_id, t.titulo, t.descripcion, 
                  t.fecha_vencimiento, t.prioridad, t.completado, 
-                 t.tiempo_finalizacion_id, t.puntos_base, t.puntos_bonus
+                 t.tiempo_finalizacion_id, t.puntos_base, t.puntos_bonus,
+                 t.codigo_base, t.resultado_esperado
           FROM tareas t
         `;
         const condiciones: string[] = [];
@@ -129,7 +150,13 @@ export const tareaResolvers = {
         sqlQuery += ' ORDER BY t.prioridad DESC, t.fecha_vencimiento ASC';
 
         const result = await query(sqlQuery, parametros) as any[];
-        return result;
+        return result.map(tarea => ({
+          ...tarea,
+          puntosBase: tarea.puntos_base,
+          puntosBonus: tarea.puntos_bonus,
+          codigoBase: tarea.codigo_base,
+          resultadoEsperado: tarea.resultado_esperado
+        }));
       } catch (error) {
         console.error('Error al obtener tareas:', error);
         throw new Error('Error interno del servidor');
@@ -140,8 +167,9 @@ export const tareaResolvers = {
     tarea: async (_: any, { id }: { id: string }) => {
       try {
         const result = await query(
-          `SELECT id, categoria_id, nivel_id, descripcion, fecha_vencimiento, 
-                  prioridad, completado, tiempo_finalizacion_id, puntos_base, puntos_bonus
+          `SELECT id, categoria_id, nivel_id, titulo, descripcion, fecha_vencimiento, 
+                  prioridad, completado, tiempo_finalizacion_id, puntos_base, puntos_bonus,
+                  codigo_base, resultado_esperado
            FROM tareas WHERE id = ?`,
           [id]
         ) as any[];
@@ -150,7 +178,14 @@ export const tareaResolvers = {
           throw new UserInputError('Tarea no encontrada');
         }
         
-        return result[0];
+        const tarea = result[0];
+         return {
+           ...tarea,
+           puntosBase: tarea.puntos_base,
+           puntosBonus: tarea.puntos_bonus,
+           codigoBase: tarea.codigo_base,
+           resultadoEsperado: tarea.resultado_esperado
+         };
       } catch (error) {
         if (error instanceof UserInputError) {
           throw error;
@@ -164,13 +199,20 @@ export const tareaResolvers = {
     tareasPorCategoria: async (_: any, { categoriaId }: { categoriaId: string }) => {
       try {
         const result = await query(
-          `SELECT id, categoria_id, nivel_id, descripcion, fecha_vencimiento, 
-                  prioridad, completado, tiempo_finalizacion_id, puntos_base, puntos_bonus
+          `SELECT id, categoria_id, nivel_id, titulo, descripcion, fecha_vencimiento, 
+                  prioridad, completado, tiempo_finalizacion_id, puntos_base, puntos_bonus,
+                  codigo_base, resultado_esperado
            FROM tareas WHERE categoria_id = ? 
            ORDER BY prioridad DESC, fecha_vencimiento ASC`,
           [categoriaId]
         ) as any[];
-        return result;
+        return result.map(tarea => ({
+          ...tarea,
+          puntosBase: tarea.puntos_base,
+          puntosBonus: tarea.puntos_bonus,
+          codigoBase: tarea.codigo_base,
+          resultadoEsperado: tarea.resultado_esperado
+        }));
       } catch (error) {
         console.error('Error al obtener tareas por categoría:', error);
         throw new Error('Error interno del servidor');
@@ -181,13 +223,21 @@ export const tareaResolvers = {
     tareasPorNivel: async (_: any, { nivelId }: { nivelId: string }) => {
       try {
         const result = await query(
-          `SELECT id, categoria_id, nivel_id, descripcion, fecha_vencimiento, 
-                  prioridad, completado, tiempo_finalizacion_id, puntos_base, puntos_bonus
+          `SELECT id, categoria_id, nivel_id, titulo, descripcion, fecha_vencimiento, 
+                  prioridad, completado, tiempo_finalizacion_id, puntos_base, puntos_bonus,
+                  codigo_base, resultado_esperado
            FROM tareas WHERE nivel_id = ? 
            ORDER BY prioridad DESC, fecha_vencimiento ASC`,
           [nivelId]
         ) as any[];
-        return result;
+        
+        return result.map(tarea => ({
+          ...tarea,
+          puntosBase: tarea.puntos_base,
+          puntosBonus: tarea.puntos_bonus,
+          codigoBase: tarea.codigo_base,
+          resultadoEsperado: tarea.resultado_esperado
+        }));
       } catch (error) {
         console.error('Error al obtener tareas por nivel:', error);
         throw new Error('Error interno del servidor');
@@ -198,13 +248,20 @@ export const tareaResolvers = {
     tareasPorPrioridad: async (_: any, { prioridad }: { prioridad: number }) => {
       try {
         const result = await query(
-          `SELECT id, categoria_id, nivel_id, descripcion, fecha_vencimiento, 
-                  prioridad, completado, tiempo_finalizacion_id, puntos_base, puntos_bonus
+          `SELECT id, categoria_id, nivel_id, titulo, descripcion, fecha_vencimiento, 
+                  prioridad, completado, tiempo_finalizacion_id, puntos_base, puntos_bonus,
+                  codigo_base, resultado_esperado
            FROM tareas WHERE prioridad = ? 
            ORDER BY fecha_vencimiento ASC`,
           [prioridad]
         ) as any[];
-        return result;
+        return result.map(tarea => ({
+          ...tarea,
+          puntosBase: tarea.puntos_base,
+          puntosBonus: tarea.puntos_bonus,
+          codigoBase: tarea.codigo_base,
+          resultadoEsperado: tarea.resultado_esperado
+        }));
       } catch (error) {
         console.error('Error al obtener tareas por prioridad:', error);
         throw new Error('Error interno del servidor');
@@ -215,12 +272,19 @@ export const tareaResolvers = {
     tareasCompletadas: async () => {
       try {
         const result = await query(
-          `SELECT id, categoria_id, nivel_id, descripcion, fecha_vencimiento, 
-                  prioridad, completado, tiempo_finalizacion_id, puntos_base, puntos_bonus
+          `SELECT id, categoria_id, nivel_id, titulo, descripcion, fecha_vencimiento, 
+                  prioridad, completado, tiempo_finalizacion_id, puntos_base, puntos_bonus,
+                  codigo_base, resultado_esperado
            FROM tareas WHERE completado = true 
            ORDER BY prioridad DESC, fecha_vencimiento ASC`
         ) as any[];
-        return result;
+        return result.map(tarea => ({
+          ...tarea,
+          puntosBase: tarea.puntos_base,
+          puntosBonus: tarea.puntos_bonus,
+          codigoBase: tarea.codigo_base,
+          resultadoEsperado: tarea.resultado_esperado
+        }));
       } catch (error) {
         console.error('Error al obtener tareas completadas:', error);
         throw new Error('Error interno del servidor');
@@ -231,12 +295,19 @@ export const tareaResolvers = {
     tareasPendientes: async () => {
       try {
         const result = await query(
-          `SELECT id, categoria_id, nivel_id, descripcion, fecha_vencimiento, 
-                  prioridad, completado, tiempo_finalizacion_id, puntos_base, puntos_bonus
+          `SELECT id, categoria_id, nivel_id, titulo, descripcion, fecha_vencimiento, 
+                  prioridad, completado, tiempo_finalizacion_id, puntos_base, puntos_bonus,
+                  codigo_base, resultado_esperado
            FROM tareas WHERE completado = false 
            ORDER BY prioridad DESC, fecha_vencimiento ASC`
         ) as any[];
-        return result;
+        return result.map(tarea => ({
+          ...tarea,
+          puntosBase: tarea.puntos_base,
+          puntosBonus: tarea.puntos_bonus,
+          codigoBase: tarea.codigo_base,
+          resultadoEsperado: tarea.resultado_esperado
+        }));
       } catch (error) {
         console.error('Error al obtener tareas pendientes:', error);
         throw new Error('Error interno del servidor');
@@ -311,16 +382,17 @@ export const tareaResolvers = {
 
         // Crear la nueva tarea
         const result = await query(
-          `INSERT INTO tareas (categoria_id, nivel_id, descripcion, fecha_vencimiento, 
-                              prioridad, puntos_base, tiempo_finalizacion_id) 
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [categoriaId, nivelId, descripcion, fechaVencimiento, prioridad, puntosBase, tiempoFinalizacionId]
+          `INSERT INTO tareas (categoria_id, nivel_id, titulo, descripcion, fecha_vencimiento, 
+                              prioridad, puntos_base, tiempo_finalizacion_id, codigo_base, resultado_esperado) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [categoriaId, nivelId, input.titulo || '', descripcion, fechaVencimiento, prioridad, puntosBase, tiempoFinalizacionId, input.codigoBase || '', input.resultadoEsperado || '']
         ) as any;
 
         // Obtener la tarea creada
         const newTarea = await query(
-          `SELECT id, categoria_id, nivel_id, descripcion, fecha_vencimiento, 
-                  prioridad, completado, tiempo_finalizacion_id, puntos_base, puntos_bonus
+          `SELECT id, categoria_id, nivel_id, titulo, descripcion, fecha_vencimiento, 
+                  prioridad, completado, tiempo_finalizacion_id, puntos_base, puntos_bonus,
+                  codigo_base, resultado_esperado
            FROM tareas WHERE id = ?`,
           [result.insertId]
         ) as any[];
@@ -456,6 +528,21 @@ export const tareaResolvers = {
           valores.push(tiempoFinalizacionId);
         }
 
+        if (input.titulo !== undefined) {
+          campos.push('titulo = ?');
+          valores.push(input.titulo);
+        }
+
+        if (input.codigoBase !== undefined) {
+          campos.push('codigo_base = ?');
+          valores.push(input.codigoBase);
+        }
+
+        if (input.resultadoEsperado !== undefined) {
+          campos.push('resultado_esperado = ?');
+          valores.push(input.resultadoEsperado);
+        }
+
         if (campos.length === 0) {
           throw new UserInputError('Debes proporcionar al menos un campo para actualizar');
         }
@@ -467,8 +554,9 @@ export const tareaResolvers = {
 
         // Obtener la tarea actualizada
         const updatedTarea = await query(
-          `SELECT id, categoria_id, nivel_id, descripcion, fecha_vencimiento, 
-                  prioridad, completado, tiempo_finalizacion_id, puntos_base, puntos_bonus
+          `SELECT id, categoria_id, nivel_id, titulo, descripcion, fecha_vencimiento, 
+                  prioridad, completado, tiempo_finalizacion_id, puntos_base, puntos_bonus,
+                  codigo_base, resultado_esperado
            FROM tareas WHERE id = ?`,
           [id]
         ) as any[];
@@ -517,8 +605,9 @@ export const tareaResolvers = {
 
         // Obtener la tarea actualizada
         const updatedTarea = await query(
-          `SELECT id, categoria_id, nivel_id, descripcion, fecha_vencimiento, 
-                  prioridad, completado, tiempo_finalizacion_id, puntos_base, puntos_bonus
+          `SELECT id, categoria_id, nivel_id, titulo, descripcion, fecha_vencimiento, 
+                  prioridad, completado, tiempo_finalizacion_id, puntos_base, puntos_bonus,
+                  codigo_base, resultado_esperado
            FROM tareas WHERE id = ?`,
           [id]
         ) as any[];

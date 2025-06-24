@@ -1,0 +1,182 @@
+GUÍA PARA INTRODUCIR EJERCICIOS EN LA BASE DE DATOS ASTROCODE
+================================================================
+
+Esta guía explica cómo introducir nuevos ejercicios (tareas) en la base de datos de AstroCode.
+
+1. ESTRUCTURA DE LA BASE DE DATOS
+==================================
+
+Para introducir un ejercicio, necesitas trabajar con las siguientes tablas:
+
+- categorias: Define las categorías de ejercicios (ej: Variables, Bucles, Funciones)
+- niveles: Define los niveles de dificultad (ej: Fácil, Intermedio, Difícil)
+- tiempos_finalizacion: Define umbrales de tiempo para puntos bonus
+- tareas: La tabla principal donde se almacenan los ejercicios
+
+2. PASOS PARA INTRODUCIR UN EJERCICIO
+=====================================
+
+Paso 1: Verificar/Crear Categoría
+----------------------------------
+Primero verifica si la categoría del ejercicio ya existe:
+
+SELECT * FROM categorias WHERE nombre = 'Variables';
+
+Si no existe, créala:
+
+INSERT INTO categorias (nombre) VALUES ('Variables');
+
+Paso 2: Verificar/Crear Nivel
+------------------------------
+Verifica si el nivel de dificultad existe:
+
+SELECT * FROM niveles WHERE nombre = 'Fácil';
+
+Si no existe, créalo (especificando los puntos base):
+
+INSERT INTO niveles (nombre, puntos) VALUES ('Fácil', 50);
+
+Ejemplos de niveles:
+- Fácil: 50 puntos
+- Intermedio: 100 puntos
+- Difícil: 200 puntos
+
+Paso 3: Crear Tiempo de Finalización (Opcional)
+------------------------------------------------
+Si quieres dar puntos bonus por completar rápido:
+
+INSERT INTO tiempos_finalizacion (umbral, puntos_bonus) 
+VALUES ('00:05:00', 25); -- 5 minutos, 25 puntos bonus
+
+Paso 4: Insertar el Ejercicio
+------------------------------
+Finalmente, inserta el ejercicio en la tabla tareas:
+
+INSERT INTO tareas (
+    categoria_id,
+    nivel_id,
+    descripcion,
+    fecha_vencimiento,
+    prioridad,
+    tiempo_finalizacion_id,
+    puntos_base,
+    puntos_bonus
+) VALUES (
+    1,  -- ID de la categoría
+    1,  -- ID del nivel
+    'Crea una variable de tipo entero llamada "edad" y asígnale el valor 25',
+    NULL,  -- Sin fecha de vencimiento
+    3,     -- Prioridad media (1-5)
+    1,     -- ID del tiempo de finalización (opcional)
+    50,    -- Puntos base
+    0      -- Puntos bonus adicionales
+);
+
+3. EJEMPLO COMPLETO
+===================
+
+-- 1. Crear categoría si no existe
+INSERT IGNORE INTO categorias (nombre) VALUES ('Variables y Tipos');
+
+-- 2. Crear nivel si no existe
+INSERT IGNORE INTO niveles (nombre, puntos) VALUES ('Principiante', 30);
+
+-- 3. Crear tiempo de finalización
+INSERT INTO tiempos_finalizacion (umbral, puntos_bonus) 
+VALUES ('00:03:00', 15);
+
+-- 4. Obtener IDs necesarios
+SET @categoria_id = (SELECT id FROM categorias WHERE nombre = 'Variables y Tipos');
+SET @nivel_id = (SELECT id FROM niveles WHERE nombre = 'Principiante');
+SET @tiempo_id = LAST_INSERT_ID();
+
+-- 5. Insertar el ejercicio
+INSERT INTO tareas (
+    categoria_id,
+    nivel_id,
+    descripcion,
+    prioridad,
+    tiempo_finalizacion_id,
+    puntos_base,
+    puntos_bonus
+) VALUES (
+    @categoria_id,
+    @nivel_id,
+    'Declara una variable llamada "nombre" de tipo string y asígnale tu nombre',
+    2,
+    @tiempo_id,
+    30,
+    0
+);
+
+4. CONSIDERACIONES IMPORTANTES
+==============================
+
+- La descripción debe ser clara y específica
+- La prioridad va de 1 (baja) a 5 (alta)
+- Los puntos_base normalmente coinciden con los puntos del nivel
+- El tiempo_finalizacion_id es opcional
+- Usa fecha_vencimiento solo para ejercicios con límite de tiempo
+- El campo completado siempre inicia en FALSE
+
+5. CONSULTAS ÚTILES
+===================
+
+-- Ver todas las categorías
+SELECT * FROM categorias ORDER BY nombre;
+
+-- Ver todos los niveles
+SELECT * FROM niveles ORDER BY puntos;
+
+-- Ver ejercicios de una categoría específica
+SELECT t.*, c.nombre as categoria, n.nombre as nivel 
+FROM tareas t 
+JOIN categorias c ON t.categoria_id = c.id 
+JOIN niveles n ON t.nivel_id = n.id 
+WHERE c.nombre = 'Variables';
+
+-- Ver ejercicios por dificultad
+SELECT t.*, n.nombre as nivel 
+FROM tareas t 
+JOIN niveles n ON t.nivel_id = n.id 
+WHERE n.nombre = 'Fácil'
+ORDER BY t.prioridad DESC;
+
+6. USANDO GRAPHQL (RECOMENDADO)
+===============================
+
+En lugar de SQL directo, puedes usar las mutaciones GraphQL disponibles:
+
+mutation CrearTarea {
+  crearTarea(input: {
+    categoriaId: "1"
+    nivelId: "1"
+    descripcion: "Tu descripción del ejercicio aquí"
+    prioridad: 3
+    puntosBase: 50
+  }) {
+    id
+    descripcion
+    categoria {
+      nombre
+    }
+    nivel {
+      nombre
+    }
+  }
+}
+
+Esto es más seguro y mantiene la consistencia de datos.
+
+7. NOTAS FINALES
+================
+
+- Siempre haz backup antes de insertar datos
+- Verifica que los IDs de categoría y nivel existan
+- Prueba los ejercicios antes de ponerlos en producción
+- Mantén consistencia en la descripción y formato
+- Considera el balance de dificultad y puntos
+
+Para más información, consulta los resolvers en:
+- src/graphql/resolvers/tareaResolvers.ts
+- src/graphql/resolvers/categoriaResolvers.ts
