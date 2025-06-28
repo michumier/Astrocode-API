@@ -71,14 +71,7 @@ export const tareaResolvers = {
           'SELECT id, nombre FROM categorias WHERE id = ?',
           [parent.categoria_id]
         ) as any[];
-        const tarea = result[0];
-         return {
-           ...tarea,
-           puntosBase: tarea.puntos_base,
-           puntosBonus: tarea.puntos_bonus,
-           codigoBase: tarea.codigo_base,
-           resultadoEsperado: tarea.resultado_esperado
-         };
+        return result[0];
       } catch (error) {
         console.error('Error al obtener categoría de tarea:', error);
         throw new Error('Error interno del servidor');
@@ -92,14 +85,7 @@ export const tareaResolvers = {
           'SELECT id, nombre, puntos FROM niveles WHERE id = ?',
           [parent.nivel_id]
         ) as any[];
-        const tarea = result[0];
-         return {
-           ...tarea,
-           puntosBase: tarea.puntos_base,
-           puntosBonus: tarea.puntos_bonus,
-           codigoBase: tarea.codigo_base,
-           resultadoEsperado: tarea.resultado_esperado
-         };
+        return result[0];
       } catch (error) {
         console.error('Error al obtener nivel de tarea:', error);
         throw new Error('Error interno del servidor');
@@ -222,6 +208,9 @@ export const tareaResolvers = {
     // Obtener tareas por nivel
     tareasPorNivel: async (_: any, { nivelId }: { nivelId: string }) => {
       try {
+        console.log('=== DEBUG RESOLVER tareasPorNivel ===');
+        console.log('nivelId recibido:', nivelId);
+        
         const result = await query(
           `SELECT id, categoria_id, nivel_id, titulo, descripcion, fecha_vencimiento, 
                   prioridad, completado, tiempo_finalizacion_id, puntos_base, puntos_bonus,
@@ -231,13 +220,40 @@ export const tareaResolvers = {
           [nivelId]
         ) as any[];
         
-        return result.map(tarea => ({
-          ...tarea,
-          puntosBase: tarea.puntos_base,
-          puntosBonus: tarea.puntos_bonus,
-          codigoBase: tarea.codigo_base,
-          resultadoEsperado: tarea.resultado_esperado
-        }));
+        console.log('Resultado de la consulta SQL:', result);
+        console.log('Número de tareas encontradas:', result.length);
+        
+        if (result.length > 0) {
+          console.log('Primera tarea - datos raw:');
+          console.log('- id:', result[0].id);
+          console.log('- titulo:', result[0].titulo);
+          console.log('- codigo_base:', result[0].codigo_base);
+          console.log('- resultado_esperado:', result[0].resultado_esperado);
+          console.log('- tipo codigo_base:', typeof result[0].codigo_base);
+          console.log('- tipo resultado_esperado:', typeof result[0].resultado_esperado);
+        }
+        
+        const mappedResult = result.map(tarea => {
+          const mapped = {
+            ...tarea,
+            puntosBase: tarea.puntos_base,
+            puntosBonus: tarea.puntos_bonus,
+            codigoBase: tarea.codigo_base,
+            resultadoEsperado: tarea.resultado_esperado
+          };
+          
+          console.log('Tarea mapeada:', {
+            id: mapped.id,
+            titulo: mapped.titulo,
+            codigoBase: mapped.codigoBase,
+            resultadoEsperado: mapped.resultadoEsperado
+          });
+          
+          return mapped;
+        });
+        
+        console.log('=== FIN DEBUG RESOLVER ===');
+        return mappedResult;
       } catch (error) {
         console.error('Error al obtener tareas por nivel:', error);
         throw new Error('Error interno del servidor');
