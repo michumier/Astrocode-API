@@ -88,6 +88,14 @@ const verifyToken = (token: string): any => {
   }
 };
 
+// Función helper para formatear fechas de usuario
+const formatUsuarioFechas = (usuario: any) => {
+  if (usuario.creado_el) {
+    usuario.creado_el = new Date(usuario.creado_el).toISOString();
+  }
+  return usuario;
+};
+
 // Función para obtener usuario del contexto
 const getUsuarioFromContext = async (context: Context): Promise<Usuario> => {
   if (!context.token) {
@@ -104,7 +112,7 @@ const getUsuarioFromContext = async (context: Context): Promise<Usuario> => {
     throw new AuthenticationError('Usuario no encontrado');
   }
   
-  return usuarios[0];
+  return formatUsuarioFechas(usuarios[0]);
 };
 
 export const userResolvers = {
@@ -136,7 +144,7 @@ export const userResolvers = {
           'SELECT id, nombre_usuario, correo_electronico, nombre_completo, puntos, creado_el FROM usuarios ORDER BY creado_el DESC'
         ) as Usuario[];
         console.log('Usuarios obtenidos:', usuarios.length);
-        return usuarios;
+        return usuarios.map(formatUsuarioFechas);
       } catch (error) {
         console.error('Error detallado al obtener usuarios:', error);
         throw new Error(`Error al obtener usuarios: ${(error as Error).message}`);
@@ -369,7 +377,7 @@ export const userResolvers = {
 
         return {
           token,
-          usuario: usuarioSinHash
+          usuario: formatUsuarioFechas(usuarioSinHash)
         };
       } catch (error) {
         if (error instanceof AuthenticationError) {

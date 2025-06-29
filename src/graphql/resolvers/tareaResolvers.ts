@@ -294,22 +294,34 @@ export const tareaResolvers = {
       }
     },
 
-    // Obtener tareas completadas
-    tareasCompletadas: async () => {
+    // Obtener tareas completadas por el usuario actual
+    tareasCompletadas: async (_: any, __: any, context: Context) => {
+      if (!context.user) {
+        throw new AuthenticationError('Debes estar autenticado para ver las tareas completadas');
+      }
+
       try {
+        const usuarioId = context.user.id;
         const result = await query(
-          `SELECT id, categoria_id, nivel_id, titulo, descripcion, fecha_vencimiento, 
-                  prioridad, completado, tiempo_finalizacion_id, puntos_base, puntos_bonus,
-                  codigo_base, resultado_esperado
-           FROM tareas WHERE completado = true 
-           ORDER BY prioridad DESC, fecha_vencimiento ASC`
-        ) as any[];
+          `SELECT t.id, t.categoria_id, t.nivel_id, t.titulo, t.descripcion, t.fecha_vencimiento, 
+                  t.prioridad, t.completado, t.tiempo_finalizacion_id, t.puntos_base, t.puntos_bonus,
+                  t.codigo_base, t.resultado_esperado, n.nombre as nivel_nombre
+           FROM tareas t 
+           JOIN tareas_usuarios tu ON t.id = tu.tarea_id
+           JOIN niveles n ON t.nivel_id = n.id
+           WHERE tu.usuario_id = ?
+           ORDER BY tu.completado_el DESC`
+        , [usuarioId]) as any[];
+        
         return result.map(tarea => ({
           ...tarea,
           puntosBase: tarea.puntos_base,
           puntosBonus: tarea.puntos_bonus,
           codigoBase: tarea.codigo_base,
-          resultadoEsperado: tarea.resultado_esperado
+          resultadoEsperado: tarea.resultado_esperado,
+          nivel: {
+            nombre: tarea.nivel_nombre
+          }
         }));
       } catch (error) {
         console.error('Error al obtener tareas completadas:', error);
