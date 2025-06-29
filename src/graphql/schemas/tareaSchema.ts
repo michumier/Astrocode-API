@@ -72,6 +72,9 @@ export const tareaTypeDefs = gql`
     
     # Obtener tareas pendientes
     tareasPendientes: [Tarea!]!
+    
+    # Verificar si una tarea está completada por el usuario
+    esTareaCompletada(tareaId: ID!): Boolean!
   }
 
   extend type Mutation {
@@ -82,9 +85,16 @@ export const tareaTypeDefs = gql`
     actualizarTarea(id: ID!, input: ActualizarTareaInput!): Tarea!
     
     # Marcar tarea como completada
-    completarTarea(id: ID!): Tarea!
+    completarTarea(tareaId: ID!, tiempoCompletado: Int!): CompletarTareaResponse!
     
     # Eliminar una tarea
     eliminarTarea(id: ID!): Boolean!
+  }
+
+  type CompletarTareaResponse {
+    success: Boolean!
+    puntos: Int!
+    tiempo: String!
+    mensaje: String!
   }
 `;

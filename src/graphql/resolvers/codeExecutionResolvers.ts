@@ -18,57 +18,53 @@ interface ExecutionResult {
   memory?: number;
 }
 
-const JUDGE0_API_URL = 'https://judge0-ce.p.rapidapi.com';
-const PYTHON_LANGUAGE_ID = 71; // Python 3.8.1
+// URL del contenedor Docker local (usando nombre del servicio)
+const PYTHON_RUNNER_URL = process.env.PYTHON_RUNNER_URL || 'http://python-runner:5000';
 
-// Configuración de RapidAPI para Judge0
-const RAPIDAPI_CONFIG = {
+// Configuración para peticiones HTTP al contenedor local
+const HTTP_CONFIG = {
   headers: {
-    'Content-Type': 'application/json',
-    'X-RapidAPI-Key': process.env.RAPIDAPI_KEY || '', // Agregar tu API key aquí
-    'X-RapidAPI-Host': 'judge0-ce.p.rapidapi.com'
-  }
+    'Content-Type': 'application/json'
+  },
+  timeout: 10000 // Timeout de 10 segundos
 };
 
 export const codeExecutionResolvers = {
   Mutation: {
     executeCode: async (_: any, { input }: { input: ExecuteCodeInput }): Promise<ExecutionResult> => {
       try {
-        const { sourceCode, languageId = PYTHON_LANGUAGE_ID, stdin = '' } = input;
+        const { sourceCode, stdin = '' } = input;
+        const startTime = Date.now();
 
-        // Crear submission en Judge0
-        const submissionResponse = await axios.post(
-          `${JUDGE0_API_URL}/submissions`,
+        // Enviar código al contenedor Docker local
+        const response = await axios.post(
+          `${PYTHON_RUNNER_URL}/run`,
           {
-            source_code: sourceCode,
-            language_id: languageId,
-            stdin: stdin,
-            wait: true, // Esperar a que termine la ejecución
-            cpu_time_limit: 5, // Límite de 5 segundos
-            memory_limit: 128000 // Límite de 128MB
+            code: sourceCode
           },
-          RAPIDAPI_CONFIG
+          HTTP_CONFIG
         );
 
-        const submission = submissionResponse.data;
+        const result = response.data;
+        const executionTime = ((Date.now() - startTime) / 1000).toFixed(3);
 
-        // Si no se ejecutó inmediatamente, obtener el resultado
-        let result = submission;
-        if (!submission.stdout && !submission.stderr && submission.token) {
-          const resultResponse = await axios.get(
-            `${JUDGE0_API_URL}/submissions/${submission.token}`,
-            RAPIDAPI_CONFIG
-          );
-          result = resultResponse.data;
+        // Determinar el estado basado en el exit_code
+        let status;
+        if (result.exit_code === 0) {
+          status = { id: 3, description: 'Accepted' };
+        } else if (result.exit_code === 124) {
+          status = { id: 5, description: 'Time Limit Exceeded' };
+        } else {
+          status = { id: 6, description: 'Runtime Error' };
         }
 
         return {
           stdout: result.stdout || '',
           stderr: result.stderr || '',
-          compile_output: result.compile_output || '',
-          status: result.status || { id: 0, description: 'Unknown' },
-          time: result.time || '0',
-          memory: result.memory || 0
+          compile_output: '', // Python no tiene compilación separada
+          status: status,
+          time: executionTime,
+          memory: 0 // El contenedor local no reporta uso de memoria específico
         };
 
       } catch (error: any) {
@@ -76,9 +72,11 @@ export const codeExecutionResolvers = {
         
         // Manejo de errores específicos
         if (error.response) {
-          throw new Error(`Judge0 API Error: ${error.response.status} - ${error.response.data?.message || 'Unknown error'}`);
+          throw new Error(`Python Runner Error: ${error.response.status} - ${error.response.data?.stderr || 'Error desconocido'}`);
         } else if (error.request) {
-          throw new Error('No se pudo conectar con el servicio de ejecución de código');
+          throw new Error('No se pudo conectar con el contenedor de ejecución de código Python. Asegúrate de que el contenedor esté ejecutándose.');
+        } else if (error.code === 'ECONNREFUSED') {
+          throw new Error('Conexión rechazada: El contenedor Python Runner no está disponible en localhost:5000');
         } else {
           throw new Error(`Error interno: ${error.message}`);
         }

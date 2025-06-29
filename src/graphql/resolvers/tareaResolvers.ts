@@ -22,6 +22,16 @@ class ForbiddenError extends GraphQLError {
   }
 }
 
+class AuthenticationError extends GraphQLError {
+  constructor(message: string) {
+    super(message, {
+      extensions: {
+        code: 'UNAUTHENTICATED',
+      },
+    });
+  }
+}
+
 // Context interface
 interface Context {
   token?: string;
@@ -329,6 +339,26 @@ export const tareaResolvers = {
         throw new Error('Error interno del servidor');
       }
     },
+
+    esTareaCompletada: async (_: any, { tareaId }: { tareaId: string }, context: Context) => {
+      // Verificar autenticación
+      if (!context.user) {
+        return false;
+      }
+
+      try {
+        const usuarioId = context.user.id;
+        const result = await query(
+          'SELECT COUNT(*) as count FROM tareas_usuarios WHERE usuario_id = ? AND tarea_id = ?',
+          [usuarioId, tareaId]
+        ) as any[];
+
+        return result[0].count > 0;
+      } catch (error: any) {
+        console.error('Error al verificar tarea completada:', error);
+        return false;
+      }
+    },
   },
 
   Mutation: {
@@ -588,56 +618,6 @@ export const tareaResolvers = {
     },
 
     // Marcar tarea como completada
-    completarTarea: async (
-      _: any,
-      { id }: { id: string },
-      context: Context
-    ) => {
-      // Verificar autenticación
-      if (!context.user) {
-        throw new ForbiddenError('Debes estar autenticado para completar tareas');
-      }
-
-      try {
-        // Verificar que la tarea existe y no está completada
-        const tarea = await query(
-          'SELECT id, completado FROM tareas WHERE id = ?',
-          [id]
-        ) as any[];
-
-        if (tarea.length === 0) {
-          throw new UserInputError('Tarea no encontrada');
-        }
-
-        if (tarea[0].completado) {
-          throw new UserInputError('La tarea ya está completada');
-        }
-
-        // Marcar como completada
-        await query(
-          'UPDATE tareas SET completado = true WHERE id = ?',
-          [id]
-        );
-
-        // Obtener la tarea actualizada
-        const updatedTarea = await query(
-          `SELECT id, categoria_id, nivel_id, titulo, descripcion, fecha_vencimiento, 
-                  prioridad, completado, tiempo_finalizacion_id, puntos_base, puntos_bonus,
-                  codigo_base, resultado_esperado
-           FROM tareas WHERE id = ?`,
-          [id]
-        ) as any[];
-
-        return updatedTarea[0];
-      } catch (error) {
-        if (error instanceof UserInputError || error instanceof ForbiddenError) {
-          throw error;
-        }
-        console.error('Error al completar tarea:', error);
-        throw new Error('Error interno del servidor');
-      }
-    },
-
     // Eliminar una tarea
     eliminarTarea: async (
       _: any,
@@ -682,6 +662,79 @@ export const tareaResolvers = {
           throw error;
         }
         console.error('Error al eliminar tarea:', error);
+        throw new Error('Error interno del servidor');
+      }
+    },
+
+    completarTarea: async (
+      _: any,
+      { tareaId, tiempoCompletado }: { tareaId: string; tiempoCompletado: number },
+      context: Context
+    ) => {
+      // Verificar autenticación
+      if (!context.user) {
+        throw new AuthenticationError('Debes estar autenticado para completar una tarea');
+      }
+
+      try {
+        const usuarioId = context.user.id;
+
+        // Verificar si la tarea ya está completada por este usuario
+        const tareaCompletada = await query(
+          'SELECT * FROM tareas_usuarios WHERE usuario_id = ? AND tarea_id = ?',
+          [usuarioId, tareaId]
+        ) as any[];
+
+        if (tareaCompletada.length > 0) {
+          throw new UserInputError('Esta tarea ya ha sido completada');
+        }
+
+        // Obtener información de la tarea
+        const tareaInfo = await query(
+          'SELECT t.*, n.puntos as puntos_nivel FROM tareas t JOIN niveles n ON t.nivel_id = n.id WHERE t.id = ?',
+          [tareaId]
+        ) as any[];
+
+        if (tareaInfo.length === 0) {
+          throw new UserInputError('Tarea no encontrada');
+        }
+
+        const tarea = tareaInfo[0];
+        const puntosBase = tarea.puntos_base || tarea.puntos_nivel;
+        const puntosBonus = tarea.puntos_bonus || 0;
+        const puntosTotales = puntosBase + puntosBonus;
+
+        // Convertir tiempo a formato TIME (HH:MM:SS)
+        const horas = Math.floor(tiempoCompletado / 3600);
+        const minutos = Math.floor((tiempoCompletado % 3600) / 60);
+        const segundos = tiempoCompletado % 60;
+        const tiempoFormateado = `${horas.toString().padStart(2, '0')}:${minutos.toString().padStart(2, '0')}:${segundos.toString().padStart(2, '0')}`;
+
+        // Insertar en tareas_usuarios
+        await query(
+          `INSERT INTO tareas_usuarios (usuario_id, tarea_id, tiempo_completado, puntos_base, puntos_bonus, puntos_totales) 
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [usuarioId, tareaId, tiempoFormateado, puntosBase, puntosBonus, puntosTotales]
+        );
+
+        // Actualizar puntos del usuario
+        await query(
+          'UPDATE usuarios SET puntos = puntos + ? WHERE id = ?',
+          [puntosTotales, usuarioId]
+        );
+
+        return {
+          success: true,
+          puntos: puntosTotales,
+          tiempo: tiempoFormateado,
+          mensaje: `¡Felicidades! Has completado la tarea "${tarea.titulo}" y ganado ${puntosTotales} puntos.`
+        };
+
+      } catch (error: any) {
+        if (error instanceof UserInputError || error instanceof AuthenticationError) {
+          throw error;
+        }
+        console.error('Error al completar tarea:', error);
         throw new Error('Error interno del servidor');
       }
     },

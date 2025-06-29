@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  # Base de datos MySQL
+  mysql-db:
+    image: mysql:8.0
+    container_name: astrocode-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: Michu@gamificado2025
+      MYSQL_DATABASE: astrocodebd
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./src/db:/docker-entrypoint-initdb.d
+    restart: unless-stopped
+    networks:
+      - astrocode-network
+
+  # Contenedor para ejecutar código Python
+  python-runner:
+    build:
+      context: ./python-runner
+      dockerfile: Dockerfile
+    container_name: astrocode-python-runner
+    ports:
+      - "5000:5000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - astrocode-network
+
+  # Backend GraphQL API
+  astrocode-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: astrocode-api
+    ports:
+      - "4000:4000"
+    environment:
+      - NODE_ENV=development
+      - PORT=4000
+      - JWT_SECRET=${JWT_SECRET:-your-jwt-secret-here}
+      - DB_HOST=mysql-db
+      - DB_USER=root
+      - DB_PASSWORD=Michu@gamificado2025
+      - DB_NAME=astrocodebd
+      - PYTHON_RUNNER_URL=http://python-runner:5000
+    depends_on:
+      - python-runner
+      - mysql-db
+    restart: unless-stopped
+    networks:
+      - astrocode-network
+    # Montar el código fuente para desarrollo (opcional)
+    volumes:
+      - ./src:/app/src
+      - ./package.json:/app/package.json
+
+networks:
+  astrocode-network:
+    driver: bridge
+
+volumes:
+  mysql_data:

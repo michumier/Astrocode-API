@@ -112,12 +112,34 @@ export const userResolvers = {
     // Obtener todos los usuarios
     usuarios: async (): Promise<Usuario[]> => {
       try {
+        console.log('Intentando conectar a la base de datos...');
+        
+        // Verificar conexión y base de datos
+        const dbCheck = await query('SELECT DATABASE() as current_db') as any[];
+        console.log('Base de datos actual:', dbCheck[0].current_db);
+        
+        const tablesCheck = await query(
+          "SHOW TABLES FROM astrocodebd"
+        ) as any[];
+        console.log('Tablas disponibles:', tablesCheck.map(t => Object.values(t)[0]));
+        
+        const tableCheck = await query(
+          "SELECT COUNT(*) as count FROM information_schema.tables WHERE table_schema = 'astrocodebd' AND table_name = 'usuarios'"
+        ) as any[];
+        console.log('Verificación de tabla usuarios:', tableCheck[0].count);
+        
+        if (tableCheck[0].count === 0) {
+          throw new Error('La tabla usuarios no se encuentra en la base de datos astrocodebd.');
+        }
+        
         const usuarios = await query(
           'SELECT id, nombre_usuario, correo_electronico, nombre_completo, puntos, creado_el FROM usuarios ORDER BY creado_el DESC'
         ) as Usuario[];
+        console.log('Usuarios obtenidos:', usuarios.length);
         return usuarios;
       } catch (error) {
-        throw new Error('Error al obtener usuarios');
+        console.error('Error detallado al obtener usuarios:', error);
+        throw new Error(`Error al obtener usuarios: ${(error as Error).message}`);
       }
     },
 
