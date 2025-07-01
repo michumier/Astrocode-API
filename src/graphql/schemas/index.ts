@@ -4,17 +4,15 @@ import { expressMiddleware } from '@apollo/server/express4';
 import { json } from 'body-parser';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import jwt from 'jsonwebtoken';
 import { typeDefs } from '../../schema';
 import { resolvers } from '../resolvers/resolvers';
-import { createConnection, query } from '../../config/db';
+import { createConnection } from '../../config/db';
 
 // Load environment variables
 dotenv.config();
 
 interface ContextValue {
   token?: string;
-  user?: any;
 }
 
 export async function startServer() {
@@ -39,25 +37,7 @@ export async function startServer() {
     expressMiddleware(server, {
       context: async ({ req }) => {
         const token = req.headers["authorization"] || "";
-        let user = null;
-        
-        if (token) {
-          try {
-            const decoded = jwt.verify(token.replace('Bearer ', ''), process.env.JWT_SECRET || 'tu-secreto-jwt') as any;
-            const usuarios = await query(
-              'SELECT id, nombre_usuario, correo_electronico, nombre_completo, puntos, creado_el FROM usuarios WHERE id = ?',
-              [decoded.id]
-            ) as any[];
-            if (usuarios.length > 0) {
-              user = usuarios[0];
-            }
-          } catch (error) {
-            // Token inválido, user permanece null
-            console.log('Token inválido en contexto:', error instanceof Error ? error.message : 'Error desconocido');
-          }
-        }
-        
-        return { token, user };
+        return { token };
       }
     })
   );
