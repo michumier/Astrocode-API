@@ -34,6 +34,11 @@ export const userTypeDefs = gql`
     usuario: Usuario!
   }
 
+  type UserStats {
+    puntos: Int!
+    tareasCompletadas: [Tarea!]!
+  }
+
   extend type Query {
     # Obtener todos los usuarios
     usuarios: [Usuario!]!
@@ -46,6 +51,14 @@ export const userTypeDefs = gql`
     
     # Obtener el usuario actual (autenticado)
     me: Usuario
+    
+    # Obtener estadísticas del usuario autenticado
+    getUserStats: UserStats!
+  }
+
+  type RegistrarClickRecursoResponse {
+    exito: Boolean!
+    mensaje: String!
   }
 
   extend type Mutation {
@@ -63,5 +76,8 @@ export const userTypeDefs = gql`
     
     # Cambiar contraseña
     cambiarContrasena(id: ID!, contrasenaActual: String!, nuevaContrasena: String!): Boolean!
+    
+    # Registrar click en recurso externo
+    registrarClickRecurso(recursoId: ID!): RegistrarClickRecursoResponse!
   }
 `;

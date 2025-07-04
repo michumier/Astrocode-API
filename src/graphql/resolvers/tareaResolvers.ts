@@ -252,17 +252,18 @@ export const tareaResolvers = {
             resultadoEsperado: tarea.resultado_esperado
           };
           
-          console.log('Tarea mapeada:', {
-            id: mapped.id,
-            titulo: mapped.titulo,
-            codigoBase: mapped.codigoBase,
-            resultadoEsperado: mapped.resultadoEsperado
-          });
+          // Log mapped task details for debugging
+          // console.log('Tarea mapeada:', {
+          //   id: mapped.id,
+          //   titulo: mapped.titulo,
+          //   codigoBase: mapped.codigoBase,
+          //   resultadoEsperado: mapped.resultadoEsperado
+          // });
           
           return mapped;
         });
         
-        console.log('=== FIN DEBUG RESOLVER ===');
+        //console.log('=== FIN DEBUG RESOLVER ===');
         return mappedResult;
       } catch (error) {
         console.error('Error al obtener tareas por nivel:', error);
@@ -348,6 +349,39 @@ export const tareaResolvers = {
         }));
       } catch (error) {
         console.error('Error al obtener tareas pendientes:', error);
+        throw new Error('Error interno del servidor');
+      }
+    },
+
+    dailyChallenge: async (_: any, __: any, context: Context) => {
+      if (!context.user) {
+        throw new AuthenticationError('Debes estar autenticado para ver el reto diario');
+      }
+
+      try {
+        const result = await query(
+          `SELECT id, categoria_id, nivel_id, titulo, descripcion, fecha_vencimiento, 
+                  prioridad, completado, tiempo_finalizacion_id, puntos_base, puntos_bonus,
+                  codigo_base, resultado_esperado
+           FROM tareas WHERE categoria_id = 16 AND nivel_id = 4 AND fecha_vencimiento >= UTC_DATE() AND fecha_vencimiento < UTC_DATE() + INTERVAL 1 DAY
+           ORDER BY RAND()
+           LIMIT 1`
+        ) as any[];
+
+        if (result.length === 0) {
+          return null;
+        }
+
+        const tarea = result[0];
+        return {
+          ...tarea,
+          puntosBase: tarea.puntos_base,
+          puntosBonus: tarea.puntos_bonus,
+          codigoBase: tarea.codigo_base,
+          resultadoEsperado: tarea.resultado_esperado
+        };
+      } catch (error) {
+        console.error('Error al obtener el reto diario:', error);
         throw new Error('Error interno del servidor');
       }
     },

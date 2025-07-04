@@ -1,30 +1,36 @@
 import { ApolloClient, InMemoryCache, createHttpLink, gql } from '@apollo/client';
-import { setupTestEnvironment, teardownTestEnvironment, cleanupTestData, serverUrl, testUsers } from './setup';
+import fetch from 'cross-fetch';
+
+const serverUrl = 'http://localhost:4000/graphql'; // Cambia aquí por tu endpoint real
+
+const testUsers = {
+  newUser: {
+    nombre_usuario: 'usuario_nuevo',
+    correo_electronico: 'nuevo@example.com',
+    contrasena: 'Password123!',
+    nombre_completo: 'Usuario Nuevo'
+  },
+  existingUser: {
+    nombre_usuario: 'usuario_existente',
+    correo_electronico: 'existente@example.com',
+    contrasena: 'Password123!',
+    nombre_completo: 'Usuario Existente'
+  },
+  invalidEmail: {
+    correo_electronico: 'aaa',
+  }
+};
 
 describe('Pruebas de Integración - Registro de Usuario', () => {
   let client: ApolloClient<any>;
 
-  beforeAll(async () => {
-    await setupTestEnvironment();
-    
-    // Configurar cliente Apollo para pruebas
-    const httpLink = createHttpLink({
-      uri: serverUrl,
-    });
+  beforeAll(() => {
+    const httpLink = createHttpLink({ uri: serverUrl, fetch });
 
     client = new ApolloClient({
       link: httpLink,
       cache: new InMemoryCache(),
     });
-  });
-
-  afterAll(async () => {
-    await cleanupTestData();
-    await teardownTestEnvironment();
-  });
-
-  beforeEach(async () => {
-    await cleanupTestData();
   });
 
   const REGISTER_USER_MUTATION = gql`
@@ -38,84 +44,58 @@ describe('Pruebas de Integración - Registro de Usuario', () => {
     }
   `;
 
-  describe('Caso de Uso: Registro con usuario nuevo', () => {
-    test('Debe crear usuario exitosamente con datos válidos', async () => {
-      // Entrada: email nuevo, password válida
-      const input = testUsers.newUser;
-
-      try {
-        // Procedimiento: Enviar mutation registerUser con datos válidos
-        const response = await client.mutate({
-          mutation: REGISTER_USER_MUTATION,
-          variables: { input }
-        });
-
-        // Salida Esperada: Usuario creado, respuesta con datos
-        expect(response.data).toBeDefined();
-        expect(response.data.crearUsuario).toBeDefined();
-        expect(response.data.crearUsuario.correo_electronico).toBe(input.correo_electronico);
-        expect(response.data.crearUsuario.nombre_usuario).toBe(input.nombre_usuario);
-        
-        console.log('✅ ÉXITO: Usuario creado correctamente');
-      } catch (error) {
-        console.log('❌ FALLO: Error al crear usuario:', error);
-        throw error;
-      }
-    });
+  beforeEach(async () => {
+    // Aquí podrías limpiar datos si tu backend tiene endpoint para ello,
+    // si no, deja vacío o implementa a mano según tu base de datos.
   });
 
-  describe('Caso de Uso: Registro con usuario ya existente', () => {
-    test('Debe fallar al intentar registrar email duplicado', async () => {
-      // Preparación: Crear usuario existente
+  const generateUniqueUser = () => {
+    const uniqueId = Date.now() + Math.floor(Math.random() * 10000);
+    return {
+      nombre_usuario: `usuario_nuevo_${uniqueId}`,
+      correo_electronico: `nuevo_${uniqueId}@example.com`,
+      contrasena: 'Password123!',
+      nombre_completo: `Usuario Nuevo ${uniqueId}`
+    };
+  };
+
+  test('Registro con usuario nuevo debe crear usuario exitosamente', async () => {
+    const input = generateUniqueUser();
+
+    const response = await client.mutate({
+      mutation: REGISTER_USER_MUTATION,
+      variables: { input }
+    });
+
+    expect(response.data).toBeDefined();
+    expect(response.data.crearUsuario).toBeDefined();
+    expect(response.data.crearUsuario.correo_electronico).toBe(input.correo_electronico);
+    expect(response.data.crearUsuario.nombre_usuario).toBe(input.nombre_usuario);
+  });
+
+  test('Registro con usuario ya existente debe fallar', async () => {
+    // Crear usuario existente
+    try {
       await client.mutate({
         mutation: REGISTER_USER_MUTATION,
         variables: { input: testUsers.existingUser }
       });
+    } catch {}
 
-      try {
-        // Entrada: email existente, password válida
-        // Procedimiento: Enviar misma mutation con email duplicado
-        await client.mutate({
-          mutation: REGISTER_USER_MUTATION,
-          variables: { input: testUsers.existingUser }
-        });
-
-        // Si llegamos aquí, la prueba falló
-        console.log('❌ FALLO: Debería haber lanzado error por email duplicado');
-        fail('Debería haber lanzado error por email duplicado');
-      } catch (error: any) {
-        // Salida Esperada: Error "usuario ya existe"
-        expect(error.message).toContain('ya existe');
-        console.log('✅ ÉXITO: Error controlado recibido por email duplicado');
-      }
-    });
+    // Intentar crear duplicado
+    await expect(
+      client.mutate({
+        mutation: REGISTER_USER_MUTATION,
+        variables: { input: testUsers.existingUser }
+      })
+    ).rejects.toThrow(/ya existe/i);
   });
 
-  describe('Caso de Uso: Registro con email mal formado', () => {
-    test('Debe validar email en cliente antes de enviar petición', () => {
-      // Entrada: email "aaa", password válida
-      const invalidEmail = testUsers.invalidEmail.correo_electronico;
-      
-      // Procedimiento: Validar formulario desde front-end
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      const isValidEmail = emailRegex.test(invalidEmail);
-      
-      try {
-        // Salida Esperada: Error de validación en cliente
-        expect(isValidEmail).toBe(false);
-        
-        if (!isValidEmail) {
-          console.log('✅ ÉXITO: Validación de email funciona correctamente');
-          // En una aplicación real, aquí no se haría la petición al backend
-          return;
-        }
-        
-        console.log('❌ FALLO: Email inválido pasó la validación');
-        fail('Email inválido pasó la validación');
-      } catch (error) {
-        console.log('❌ FALLO: Error en validación de email:', error);
-        throw error;
-      }
-    });
+  test('Validación de email mal formado en cliente', () => {
+    const invalidEmail = testUsers.invalidEmail.correo_electronico;
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const isValidEmail = emailRegex.test(invalidEmail);
+
+    expect(isValidEmail).toBe(false);
   });
 });

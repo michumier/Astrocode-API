@@ -64,7 +64,7 @@ interface LoginInput {
 
 interface Context {
   token?: string;
-  usuario?: Usuario;
+  user?: Usuario;
 }
 
 // Función para generar JWT
@@ -97,12 +97,12 @@ const formatUsuarioFechas = (usuario: any) => {
 };
 
 // Función para obtener usuario del contexto
-const getUsuarioFromContext = async (context: Context): Promise<Usuario> => {
-  if (!context.token) {
+export const getUsuarioFromToken = async (token: string): Promise<Usuario> => {
+  if (!token) {
     throw new AuthenticationError('Token requerido');
   }
   
-  const decoded = verifyToken(context.token);
+  const decoded = verifyToken(token);
   const usuarios = await query(
     'SELECT id, nombre_usuario, correo_electronico, nombre_completo, puntos, creado_el FROM usuarios WHERE id = ?',
     [decoded.id]
@@ -120,30 +120,25 @@ export const userResolvers = {
     // Obtener todos los usuarios
     usuarios: async (): Promise<Usuario[]> => {
       try {
-        console.log('Intentando conectar a la base de datos...');
-        
+        // console.log('Intentando conectar a la base de datos...');
         // Verificar conexión y base de datos
-        const dbCheck = await query('SELECT DATABASE() as current_db') as any[];
-        console.log('Base de datos actual:', dbCheck[0].current_db);
-        
-        const tablesCheck = await query(
-          "SHOW TABLES FROM astrocodebd"
-        ) as any[];
-        console.log('Tablas disponibles:', tablesCheck.map(t => Object.values(t)[0]));
-        
-        const tableCheck = await query(
-          "SELECT COUNT(*) as count FROM information_schema.tables WHERE table_schema = 'astrocodebd' AND table_name = 'usuarios'"
-        ) as any[];
-        console.log('Verificación de tabla usuarios:', tableCheck[0].count);
-        
-        if (tableCheck[0].count === 0) {
-          throw new Error('La tabla usuarios no se encuentra en la base de datos astrocodebd.');
-        }
-        
+        // const dbCheck = await query('SELECT DATABASE() as current_db') as any[];
+        // console.log('Base de datos actual:', dbCheck[0].current_db);
+        // const tablesCheck = await query(
+        //   "SHOW TABLES FROM astrocodebd"
+        // ) as any[];
+        // console.log('Tablas disponibles:', tablesCheck.map(t => Object.values(t)[0]));
+        // const tableCheck = await query(
+        //   "SELECT COUNT(*) as count FROM information_schema.tables WHERE table_schema = 'astrocodebd' AND table_name = 'usuarios'"
+        // ) as any[];
+        // console.log('Verificación de tabla usuarios:', tableCheck[0].count);
+        // if (tableCheck[0].count === 0) {
+        //   throw new Error('La tabla usuarios no se encuentra en la base de datos astrocodebd.');
+        // }
         const usuarios = await query(
           'SELECT id, nombre_usuario, correo_electronico, nombre_completo, puntos, creado_el FROM usuarios ORDER BY creado_el DESC'
         ) as Usuario[];
-        console.log('Usuarios obtenidos:', usuarios.length);
+        // console.log('Usuarios obtenidos:', usuarios.length);
         return usuarios.map(formatUsuarioFechas);
       } catch (error) {
         console.error('Error detallado al obtener usuarios:', error);
@@ -178,8 +173,61 @@ export const userResolvers = {
     },
 
     // Obtener el usuario actual (autenticado)
-    me: async (_: any, __: any, context: Context): Promise<Usuario> => {
-      return await getUsuarioFromContext(context);
+        me: async (_: any, __: any, context: Context): Promise<Usuario> => {
+      if (!context.user) {
+        throw new AuthenticationError('Debes estar autenticado para realizar esta acción');
+      }
+      return context.user;
+    },
+    // Obtener estadísticas del usuario autenticado
+    getUserStats: async (_: any, __: any, context: Context) => {
+      if (!context.user) {
+        throw new AuthenticationError('Debes estar autenticado para ver tus estadísticas');
+      }
+      // Obtener puntos del usuario
+      const usuarios = await query(
+        'SELECT puntos FROM usuarios WHERE id = ?',
+        [context.user.id]
+      ) as { puntos: number }[];
+      const puntos = usuarios.length ? usuarios[0].puntos : 0;
+      
+      // Obtener tareas completadas directamente de la base de datos
+      try {
+        const usuarioId = context.user.id;
+        const result = await query(
+          `SELECT t.id, t.categoria_id, t.nivel_id, t.titulo, t.descripcion, t.fecha_vencimiento, 
+                  t.prioridad, t.completado, t.tiempo_finalizacion_id, t.puntos_base, t.puntos_bonus,
+                  t.codigo_base, t.resultado_esperado, n.nombre as nivel_nombre
+           FROM tareas t 
+           JOIN tareas_usuarios tu ON t.id = tu.tarea_id
+           JOIN niveles n ON t.nivel_id = n.id
+           WHERE tu.usuario_id = ?
+           ORDER BY tu.completado_el DESC`
+        , [usuarioId]) as any[];
+        
+        const tareasCompletadas = result.map(tarea => ({
+          ...tarea,
+          puntosBase: tarea.puntos_base,
+          puntosBonus: tarea.puntos_bonus,
+          codigoBase: tarea.codigo_base,
+          resultadoEsperado: tarea.resultado_esperado,
+          nivel: {
+            nombre: tarea.nivel_nombre
+          }
+        }));
+        
+        return {
+          puntos,
+          tareasCompletadas
+        };
+      } catch (error) {
+        console.error('Error al obtener tareas completadas para estadísticas:', error);
+        // En caso de error, devolver un array vacío de tareas completadas
+        return {
+          puntos,
+          tareasCompletadas: []
+        };
+      }
     },
   },
 
@@ -225,7 +273,10 @@ export const userResolvers = {
     // Actualizar un usuario existente
     actualizarUsuario: async (_: any, { id, input }: { id: string; input: ActualizarUsuarioInput }, context: Context): Promise<Usuario> => {
       try {
-        const usuarioActual = await getUsuarioFromContext(context);
+        if (!context.user) {
+          throw new AuthenticationError('Debes estar autenticado para realizar esta acción');
+        }
+        const usuarioActual = context.user;
         
         // Solo el propio usuario puede actualizarse (o implementar roles de admin)
         if (usuarioActual.id.toString() !== id.toString()) {
@@ -327,7 +378,10 @@ export const userResolvers = {
     // Eliminar un usuario
     eliminarUsuario: async (_: any, { id }: { id: string }, context: Context): Promise<boolean> => {
       try {
-        const usuarioActual = await getUsuarioFromContext(context);
+        if (!context.user) {
+          throw new AuthenticationError('Debes estar autenticado para realizar esta acción');
+        }
+        const usuarioActual = context.user;
         
         // Solo el propio usuario puede eliminarse (o implementar roles de admin)
         if (usuarioActual.id !== id) {
@@ -394,7 +448,10 @@ export const userResolvers = {
       context: Context
     ): Promise<boolean> => {
       try {
-        const usuarioActual = await getUsuarioFromContext(context);
+        if (!context.user) {
+          throw new AuthenticationError('Debes estar autenticado para realizar esta acción');
+        }
+        const usuarioActual = context.user;
         
         // Solo el propio usuario puede cambiar su contraseña
         if (usuarioActual.id !== id) {
@@ -433,6 +490,18 @@ export const userResolvers = {
         }
         throw new Error('Error al cambiar contraseña');
       }
+    },
+    // Registrar click en recurso externo
+    registrarClickRecurso: async (_: any, { recursoId }: { recursoId: string }, context: Context) => {
+      if (!context.user) {
+        throw new AuthenticationError('Debes estar autenticado para registrar el click');
+      }
+      // Aquí podrías registrar el click en la base de datos si lo deseas
+      // await query('INSERT INTO clicks_recursos (usuario_id, recurso_id, fecha) VALUES (?, ?, NOW())', [context.user.id, recursoId]);
+      return {
+        exito: true,
+        mensaje: `Click registrado para recurso ${recursoId}`
+      };
     },
   },
 };

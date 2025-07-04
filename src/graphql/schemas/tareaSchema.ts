@@ -75,6 +75,9 @@ export const tareaTypeDefs = gql`
     
     # Verificar si una tarea está completada por el usuario
     esTareaCompletada(tareaId: ID!): Boolean!
+
+    # Obtener el reto diario
+    dailyChallenge: Tarea
   }
 
   extend type Mutation {

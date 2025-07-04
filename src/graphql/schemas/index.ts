@@ -5,7 +5,7 @@ import { json } from 'body-parser';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { typeDefs } from '../../schema';
-import { resolvers } from '../resolvers/resolvers';
+import { resolvers, getUsuarioFromToken } from '../resolvers/resolvers';
 import { createConnection } from '../../config/db';
 
 // Load environment variables
@@ -13,6 +13,7 @@ dotenv.config();
 
 interface ContextValue {
   token?: string;
+  user?: any;
 }
 
 export async function startServer() {
@@ -37,6 +38,16 @@ export async function startServer() {
     expressMiddleware(server, {
       context: async ({ req }) => {
         const token = req.headers["authorization"] || "";
+        try {
+          // Solo procesar el token si existe
+          if (token) {
+            const user = await getUsuarioFromToken(token);
+            return { token, user };
+          }
+        } catch (error) {
+          console.error('Error al procesar el token:', error);
+          // No lanzar error aquí, solo devolver el token sin usuario
+        }
         return { token };
       }
     })
