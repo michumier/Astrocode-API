@@ -63,6 +63,29 @@ services:
       - ./src:/app/src
       - ./package.json:/app/package.json
 
+  # Frontend React
+  astrocode-web:
+    build:
+      context: ../Astrocode-web/client
+      dockerfile: Dockerfile
+    container_name: astrocode-web
+    ports:
+      - "3000:3000"
+    environment:
+      - REACT_APP_API_URL=http://localhost:4000/graphql
+      - WDS_SOCKET_PORT=0
+    depends_on:
+      - astrocode-api
+    restart: unless-stopped
+    networks:
+      - astrocode-network
+    # Montar el código fuente para desarrollo (opcional)
+    volumes:
+      - ../Astrocode-web/client/src:/app/src
+      - ../Astrocode-web/client/public:/app/public
+      - ../Astrocode-web/client/package.json:/app/package.json
+      - ../Astrocode-web/client/tsconfig.json:/app/tsconfig.json
+
 networks:
   astrocode-network:
     driver: bridge
