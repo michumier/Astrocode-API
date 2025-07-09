@@ -82,8 +82,20 @@ const generateToken = (usuario: Usuario): string => {
 // Función para verificar JWT
 const verifyToken = (token: string): any => {
   try {
-    return jwt.verify(token.replace('Bearer ', ''), process.env.JWT_SECRET || 'tu-secreto-jwt');
+    // Asegurarse de que el token tenga el formato correcto
+    const tokenWithoutBearer = token.startsWith('Bearer ') ? token.substring(7) : token;
+    
+    // Verificar que el token tenga el formato correcto (tres partes separadas por puntos)
+    const tokenParts = tokenWithoutBearer.split('.');
+    if (tokenParts.length !== 3) {
+      console.error('verifyToken: Formato de token inválido, no tiene tres partes');
+      throw new AuthenticationError('Formato de token inválido');
+    }
+    
+    // Verificar el token con la clave secreta
+    return jwt.verify(tokenWithoutBearer, process.env.JWT_SECRET || 'tu-secreto-jwt');
   } catch (error) {
+    console.error('verifyToken: Error al verificar token:', error);
     throw new AuthenticationError('Token inválido');
   }
 };
@@ -98,21 +110,37 @@ const formatUsuarioFechas = (usuario: any) => {
 
 // Función para obtener usuario del contexto
 export const getUsuarioFromToken = async (token: string): Promise<Usuario> => {
+  console.log('getUsuarioFromToken: Iniciando verificación de token');
+  console.log(`getUsuarioFromToken: Token recibido: ${token ? token.substring(0, 20) + '...' : 'No presente'}`);
+  
   if (!token) {
+    console.error('getUsuarioFromToken: No se proporcionó token');
     throw new AuthenticationError('Token requerido');
   }
   
-  const decoded = verifyToken(token);
-  const usuarios = await query(
-    'SELECT id, nombre_usuario, correo_electronico, nombre_completo, puntos, creado_el FROM usuarios WHERE id = ?',
-    [decoded.id]
-  ) as Usuario[];
-  
-  if (!usuarios.length) {
-    throw new AuthenticationError('Usuario no encontrado');
+  try {
+    // Verificar y decodificar el token
+    const decoded = verifyToken(token);
+    console.log('getUsuarioFromToken: Token verificado correctamente');
+    console.log('getUsuarioFromToken: Payload del token:', JSON.stringify(decoded, null, 2));
+    
+    // Buscar el usuario en la base de datos
+    const usuarios = await query(
+      'SELECT id, nombre_usuario, correo_electronico, nombre_completo, puntos, creado_el FROM usuarios WHERE id = ?',
+      [decoded.id]
+    ) as Usuario[];
+    
+    if (!usuarios.length) {
+      console.error(`getUsuarioFromToken: Usuario con ID ${decoded.id} no encontrado en la base de datos`);
+      throw new AuthenticationError('Usuario no encontrado');
+    }
+    
+    console.log(`getUsuarioFromToken: Usuario encontrado: ${usuarios[0].nombre_usuario} (ID: ${usuarios[0].id})`);
+    return formatUsuarioFechas(usuarios[0]);
+  } catch (error) {
+    console.error('getUsuarioFromToken: Error al procesar el token:', error);
+    throw error; // Reenviar el error para que sea manejado por el contexto de Apollo
   }
-  
-  return formatUsuarioFechas(usuarios[0]);
 };
 
 export const userResolvers = {
