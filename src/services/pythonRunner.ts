@@ -62,6 +62,29 @@ export async function ejecutarPython(sourceCode: string, stdin = ''): Promise<Ex
   }
 }
 
+export interface VarianteMutada {
+  codigo: string;
+  operador: string;
+  descripcion: string;
+  linea: number;
+  lineas_cambiadas: number;
+  diff: string;
+}
+
+// Pide al runner variantes saboteadas de un programa (las analiza con ast, no las ejecuta)
+export async function mutarCodigo(codigo: string, max = 12, semilla = 0): Promise<VarianteMutada[]> {
+  try {
+    const { data } = await axios.post(
+      `${PYTHON_RUNNER_URL}/mutate`,
+      { code: codigo, max, semilla },
+      { headers: { 'Content-Type': 'application/json' }, timeout: 10000 }
+    );
+    return data.variantes || [];
+  } catch (error: any) {
+    throw new Error(error.response?.data?.error || 'No se pudo conectar con el python-runner para generar sabotajes');
+  }
+}
+
 // Compara salidas ignorando saltos de línea Windows/Unix y espacios al final de cada línea
 export function normalizarSalida(texto: string): string {
   return texto

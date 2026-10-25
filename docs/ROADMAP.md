@@ -8,7 +8,7 @@
 | Fase | Qué | Tamaño | Depende de |
 |---|---|---|---|
 | **0** ✅ | Base común: editor de código de verdad, router con URLs, registro de intentos, tipos de tarea, pruebas de extremo a extremo en CI | M | — |
-| **1** | 🕵️ **Sabotaje**: el sistema rompe una solución y el alumno encuentra el fallo | M | 0 |
+| **1** ✅ | 🕵️ **Sabotaje**: el sistema rompe una solución y el alumno encuentra el fallo | M | 0 |
 | **2** | 🚀 **Misiones de pilotaje**: el código del alumno controla una nave en una simulación | L | 0 |
 | **3** | 🔭 **Caja negra**: ver la ejecución paso a paso con las variables animadas | M | 0 (editor) |
 | **4** | 📊 **Puente de mando**: analíticas para profesores | M | 0 (intentos) |
@@ -29,7 +29,7 @@ Cada decisión lleva la opción que recomiendo; si no se dice otra cosa, se apli
 |---|---|---|
 | D1 ✅ | Editor de código | **CodeMirror 6** (ligero, con buen resaltado de Python y marcado de líneas). Monaco pesa unos 5 MB. |
 | D2 ✅ | Navegación | **Migrar a `react-router-dom`** (ya está instalado) en la fase 0. Se van a añadir 5 vistas más y el router casero no da URLs ni botón «atrás». |
-| D3 | Cómo se generan los sabotajes | **Mutaciones del árbol de sintaxis (AST)** como método principal: gratis, deterministas y sin IA. La **IA es opcional**, para bugs más «humanos». |
+| D3 ✅ | Cómo se generan los sabotajes | **Mutaciones del árbol de sintaxis (AST)** como método principal: gratis, deterministas y sin IA. La **IA es opcional**, para bugs más «humanos». |
 | D4 | Seguridad de las misiones | El código del alumno corre en un **proceso separado** de la simulación y se comunican por JSON. Así no puede tocar el estado de la simulación para hacer trampa. |
 | D5 | Roles del puente de mando | **v1: un rol nuevo `profesor`** (el admin también entra), con estadísticas globales. **v2: grupos o clases** con código de invitación. |
 | D6 ✅ | Guardar el código de cada intento | **Sí**, con una retención de 180 días y un aviso en el registro. Hace falta para el puente de mando y para la repetición de intentos. |
@@ -132,8 +132,8 @@ ALTER TABLE tareas ADD COLUMN tipo VARCHAR(20) NOT NULL DEFAULT 'codigo', ADD CO
    | Mutable | `pila.pop()` → `pila.pop(0)` | estructuras |
 
 3. **Verificación** (igual que el generador de ejercicios):
-   - el código saboteado **compila** (ningún `SyntaxError`);
-   - falla **al menos un test** y pasa **al menos uno** (no está roto del todo);
+   - el código saboteado **se ejecuta** (ningún `SyntaxError`);
+   - falla **al menos un test** (si no falla ninguno, el cambio es equivalente). *Cambio respecto al plan inicial: también se aceptan los que fallan todos los tests, como sabotajes «fáciles»; exigir que pasaran alguno descartaba casi todos los bugs aritméticos.*
    - la diferencia con la solución es de 1 a 3 líneas;
    - la firma de la función no cambia.
 4. **Con IA (opcional):** se le pide un bug «que cometería un principiante» y una frase de contexto («El sistema de navegación calcula mal la distancia al último planeta…»). Pasa por la misma verificación.
@@ -165,18 +165,21 @@ extend type Query { sabotajesDisponibles: [Tarea!]! }  # los desbloqueados por e
 ```
 
 ### Criterios de aceptación
-- CA-1.1 Con la tarea «Validar Paréntesis», `generarSabotajes(cantidad: 5)` devuelve entre 3 y 5 sabotajes. Cada uno compila, falla 1 test o más y pasa 1 o más.
+- CA-1.1 Con la tarea «Validar Paréntesis», `generarSabotajes(cantidad: 5)` devuelve entre 3 y 5 sabotajes. Cada uno se ejecuta y falla 1 test o más.
 - CA-1.2 Un alumno que no ha completado la original no puede abrir el sabotaje.
 - CA-1.3 Arreglar el bug suma puntos; volver a enviar no los suma otra vez.
 - CA-1.4 Al terminar se ve el diff del sabotaje.
 
 ### Tareas
-- [ ] Mutador AST en el runner, con su catálogo y tests unitarios en Python (M)
-- [ ] Verificación y tabla `sabotajes` (migración 010) (S)
-- [ ] Mutations de admin y vista en el panel de admin (M)
-- [ ] Vista del alumno: cartel, desbloqueo y diff final (M)
-- [ ] Variante con IA reutilizando `services/ia.ts` (S)
-- [ ] Insignia «Cirujano» (S, aprovecha la tabla `insignias`, que ya existe)
+- [x] Mutador AST en el runner, con su catálogo y tests unitarios en Python (M)
+- [x] Verificación y tabla `sabotajes` (migración 010) (S)
+- [x] Mutations de admin y vista en el panel de admin (M)
+- [x] Vista del alumno: cartel, desbloqueo y diff final (M)
+- [x] Variante con IA reutilizando `services/ia.ts` (S)
+- [x] Insignia «Cirujano» (S, aprovecha la tabla `insignias`, que ya existe)
+- [x] Extra: tarjeta «Sala de máquinas» en el dashboard, pistas de sabotaje sin filtraciones, arreglo de maquetación del dashboard
+
+> Hecho en `feature/fase-1-sabotaje` (25-oct-2026). Resultados y cambios respecto al plan en `docs/pruebas/fase-1.md`.
 
 **Riesgos:** algunas mutaciones dan programas equivalentes (no cambian el comportamiento). La verificación las descarta, porque no fallan ningún test.
 

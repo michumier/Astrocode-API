@@ -11,7 +11,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copiar el código de la aplicación
-COPY runner.py .
+COPY runner.py mutador.py ./
 
 # Usuario sin privilegios: el código de los alumnos nunca corre como root
 RUN useradd --create-home --uid 10001 runner
