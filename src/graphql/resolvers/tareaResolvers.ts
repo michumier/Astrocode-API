@@ -1,42 +1,7 @@
-import { query } from '../../config/db';
+import { query, transaction } from '../../config/db';
+import { ejecutarPython, normalizarSalida } from '../../services/pythonRunner';
 import { GraphQLError } from 'graphql';
-
-// Custom error classes for Apollo Server v4
-class UserInputError extends GraphQLError {
-  constructor(message: string) {
-    super(message, {
-      extensions: {
-        code: 'BAD_USER_INPUT',
-      },
-    });
-  }
-}
-
-class ForbiddenError extends GraphQLError {
-  constructor(message: string) {
-    super(message, {
-      extensions: {
-        code: 'FORBIDDEN',
-      },
-    });
-  }
-}
-
-class AuthenticationError extends GraphQLError {
-  constructor(message: string) {
-    super(message, {
-      extensions: {
-        code: 'UNAUTHENTICATED',
-      },
-    });
-  }
-}
-
-// Context interface
-interface Context {
-  token?: string;
-  user?: any;
-}
+import { UserInputError, Context, requireAuth, requireAdmin } from '../errors';
 
 interface CrearTareaInput {
   categoriaId: string;
@@ -71,6 +36,17 @@ interface FiltroTareasInput {
   completado?: boolean;
   prioridad?: number;
 }
+
+// Índice del reto de hoy dentro de la lista de retos diarios
+const indiceRetoDelDia = async (): Promise<number> => {
+  const filas = await query(
+    `SELECT COUNT(*) AS total FROM tareas t JOIN categorias c ON t.categoria_id = c.id WHERE c.nombre = 'Reto Diario'`
+  ) as any[];
+  const total = Number(filas[0]?.total || 0);
+  if (total === 0) return 0;
+  const diasDesdeEpoch = Math.floor(Date.now() / 86400000);
+  return diasDesdeEpoch % total;
+};
 
 export const tareaResolvers = {
   Tarea: {
@@ -183,7 +159,7 @@ export const tareaResolvers = {
            resultadoEsperado: tarea.resultado_esperado
          };
       } catch (error) {
-        if (error instanceof UserInputError) {
+        if (error instanceof GraphQLError) {
           throw error;
         }
         console.error('Error al obtener tarea:', error);
@@ -297,9 +273,7 @@ export const tareaResolvers = {
 
     // Obtener tareas completadas por el usuario actual
     tareasCompletadas: async (_: any, __: any, context: Context) => {
-      if (!context.user) {
-        throw new AuthenticationError('Debes estar autenticado para ver las tareas completadas');
-      }
+      requireAuth(context, 'Debes estar autenticado para ver las tareas completadas');
 
       try {
         const usuarioId = context.user.id;
@@ -354,19 +328,31 @@ export const tareaResolvers = {
     },
 
     dailyChallenge: async (_: any, __: any, context: Context) => {
-      if (!context.user) {
-        throw new AuthenticationError('Debes estar autenticado para ver el reto diario');
-      }
+      requireAuth(context, 'Debes estar autenticado para ver el reto diario');
 
       try {
-        const result = await query(
-          `SELECT id, categoria_id, nivel_id, titulo, descripcion, fecha_vencimiento, 
-                  prioridad, completado, tiempo_finalizacion_id, puntos_base, puntos_bonus,
-                  codigo_base, resultado_esperado
-           FROM tareas WHERE categoria_id = 16 AND nivel_id = 4 AND fecha_vencimiento >= UTC_DATE() AND fecha_vencimiento < UTC_DATE() + INTERVAL 1 DAY
-           ORDER BY RAND()
-           LIMIT 1`
+        const campos = `t.id, t.categoria_id, t.nivel_id, t.titulo, t.descripcion, t.fecha_vencimiento,
+                  t.prioridad, t.completado, t.tiempo_finalizacion_id, t.puntos_base, t.puntos_bonus,
+                  t.codigo_base, t.resultado_esperado`;
+
+        // 1º: un reto programado para hoy
+        let result = await query(
+          `SELECT ${campos} FROM tareas t JOIN categorias c ON t.categoria_id = c.id
+           WHERE c.nombre = 'Reto Diario' AND t.fecha_vencimiento = UTC_DATE()
+           ORDER BY t.id LIMIT 1`
         ) as any[];
+
+        // 2º: si no hay ninguno programado, rotar entre los retos existentes según el día
+        // (el mismo reto para todos durante todo el día)
+        if (result.length === 0) {
+          result = await query(
+            `SELECT ${campos} FROM tareas t JOIN categorias c ON t.categoria_id = c.id
+             WHERE c.nombre = 'Reto Diario'
+             ORDER BY t.id
+             LIMIT 1 OFFSET ?`,
+            [String(await indiceRetoDelDia())]
+          ) as any[];
+        }
 
         if (result.length === 0) {
           return null;
@@ -415,9 +401,7 @@ export const tareaResolvers = {
       context: Context
     ) => {
       // Verificar autenticación
-      if (!context.user) {
-        throw new ForbiddenError('Debes estar autenticado para crear tareas');
-      }
+      requireAdmin(context);
 
       const {
         categoriaId,
@@ -491,7 +475,7 @@ export const tareaResolvers = {
 
         return newTarea[0];
       } catch (error) {
-        if (error instanceof UserInputError) {
+        if (error instanceof GraphQLError) {
           throw error;
         }
         console.error('Error al crear tarea:', error);
@@ -506,9 +490,7 @@ export const tareaResolvers = {
       context: Context
     ) => {
       // Verificar autenticación
-      if (!context.user) {
-        throw new ForbiddenError('Debes estar autenticado para actualizar tareas');
-      }
+      requireAdmin(context);
 
       const {
         categoriaId,
@@ -655,7 +637,7 @@ export const tareaResolvers = {
 
         return updatedTarea[0];
       } catch (error) {
-        if (error instanceof UserInputError || error instanceof ForbiddenError) {
+        if (error instanceof GraphQLError) {
           throw error;
         }
         console.error('Error al actualizar tarea:', error);
@@ -671,9 +653,7 @@ export const tareaResolvers = {
       context: Context
     ) => {
       // Verificar autenticación
-      if (!context.user) {
-        throw new ForbiddenError('Debes estar autenticado para eliminar tareas');
-      }
+      requireAdmin(context);
 
       try {
         // Verificar que la tarea existe
@@ -704,7 +684,7 @@ export const tareaResolvers = {
 
         return result.affectedRows > 0;
       } catch (error) {
-        if (error instanceof UserInputError || error instanceof ForbiddenError) {
+        if (error instanceof GraphQLError) {
           throw error;
         }
         console.error('Error al eliminar tarea:', error);
@@ -712,77 +692,88 @@ export const tareaResolvers = {
       }
     },
 
-    completarTarea: async (
+    // Corrige la solución EN EL SERVIDOR: ejecuta el código, compara con el resultado
+    // esperado y solo entonces suma los puntos. El cliente ya no decide si está bien.
+    enviarSolucion: async (
       _: any,
-      { tareaId, tiempoCompletado }: { tareaId: string; tiempoCompletado: number },
+      { tareaId, codigo, tiempoCompletado }: { tareaId: string; codigo: string; tiempoCompletado: number },
       context: Context
     ) => {
-      // Verificar autenticación
-      if (!context.user) {
-        throw new AuthenticationError('Debes estar autenticado para completar una tarea');
+      const usuario = requireAuth(context, 'Debes estar autenticado para enviar una solución');
+
+      const tareaInfo = await query(
+        'SELECT t.*, n.puntos as puntos_nivel FROM tareas t JOIN niveles n ON t.nivel_id = n.id WHERE t.id = ?',
+        [tareaId]
+      ) as any[];
+
+      if (tareaInfo.length === 0) {
+        throw new UserInputError('Tarea no encontrada');
       }
 
+      const tarea = tareaInfo[0];
+      const ejecucion = await ejecutarPython(codigo);
+      const correcto =
+        ejecucion.status.id === 3 &&
+        !!tarea.resultado_esperado &&
+        normalizarSalida(ejecucion.stdout) === normalizarSalida(tarea.resultado_esperado);
+
+      const respuesta = {
+        correcto,
+        ejecucion,
+        yaCompletada: false,
+        puntos: 0,
+        tiempo: null as string | null,
+        mensaje: correcto
+          ? ''
+          : ejecucion.status.id === 3
+            ? 'La salida no coincide con el resultado esperado. ¡Revisa tu código!'
+            : 'Tu código ha dado un error. Revisa la salida de errores.',
+      };
+
+      if (!correcto) {
+        return respuesta;
+      }
+
+      const puntosBase = tarea.puntos_base || tarea.puntos_nivel;
+      const puntosBonus = tarea.puntos_bonus || 0;
+      const puntosTotales = puntosBase + puntosBonus;
+
+      // Convertir tiempo a formato TIME (HH:MM:SS)
+      const segundosTotales = Math.max(0, Math.floor(tiempoCompletado || 0));
+      const horas = Math.floor(segundosTotales / 3600);
+      const minutos = Math.floor((segundosTotales % 3600) / 60);
+      const segundos = segundosTotales % 60;
+      const tiempoFormateado = [horas, minutos, segundos].map((n) => n.toString().padStart(2, '0')).join(':');
+
+      // Insertar el registro y sumar puntos en la misma transacción.
+      // La clave primaria (usuario_id, tarea_id) impide sumar dos veces la misma tarea.
       try {
-        const usuarioId = context.user.id;
-
-        // Verificar si la tarea ya está completada por este usuario
-        const tareaCompletada = await query(
-          'SELECT * FROM tareas_usuarios WHERE usuario_id = ? AND tarea_id = ?',
-          [usuarioId, tareaId]
-        ) as any[];
-
-        if (tareaCompletada.length > 0) {
-          throw new UserInputError('Esta tarea ya ha sido completada');
-        }
-
-        // Obtener información de la tarea
-        const tareaInfo = await query(
-          'SELECT t.*, n.puntos as puntos_nivel FROM tareas t JOIN niveles n ON t.nivel_id = n.id WHERE t.id = ?',
-          [tareaId]
-        ) as any[];
-
-        if (tareaInfo.length === 0) {
-          throw new UserInputError('Tarea no encontrada');
-        }
-
-        const tarea = tareaInfo[0];
-        const puntosBase = tarea.puntos_base || tarea.puntos_nivel;
-        const puntosBonus = tarea.puntos_bonus || 0;
-        const puntosTotales = puntosBase + puntosBonus;
-
-        // Convertir tiempo a formato TIME (HH:MM:SS)
-        const horas = Math.floor(tiempoCompletado / 3600);
-        const minutos = Math.floor((tiempoCompletado % 3600) / 60);
-        const segundos = tiempoCompletado % 60;
-        const tiempoFormateado = `${horas.toString().padStart(2, '0')}:${minutos.toString().padStart(2, '0')}:${segundos.toString().padStart(2, '0')}`;
-
-        // Insertar en tareas_usuarios
-        await query(
-          `INSERT INTO tareas_usuarios (usuario_id, tarea_id, tiempo_completado, puntos_base, puntos_bonus, puntos_totales) 
-           VALUES (?, ?, ?, ?, ?, ?)`,
-          [usuarioId, tareaId, tiempoFormateado, puntosBase, puntosBonus, puntosTotales]
-        );
-
-        // Actualizar puntos del usuario
-        await query(
-          'UPDATE usuarios SET puntos = puntos + ? WHERE id = ?',
-          [puntosTotales, usuarioId]
-        );
-
-        return {
-          success: true,
-          puntos: puntosTotales,
-          tiempo: tiempoFormateado,
-          mensaje: `¡Felicidades! Has completado la tarea "${tarea.titulo}" y ganado ${puntosTotales} puntos.`
-        };
-
+        await transaction(async (conn) => {
+          await conn.execute(
+            `INSERT INTO tareas_usuarios (usuario_id, tarea_id, tiempo_completado, puntos_base, puntos_bonus, puntos_totales)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            [usuario.id, tareaId, tiempoFormateado, puntosBase, puntosBonus, puntosTotales]
+          );
+          await conn.execute('UPDATE usuarios SET puntos = puntos + ? WHERE id = ?', [puntosTotales, usuario.id]);
+        });
       } catch (error: any) {
-        if (error instanceof UserInputError || error instanceof AuthenticationError) {
-          throw error;
+        if (error.code === 'ER_DUP_ENTRY') {
+          return {
+            ...respuesta,
+            yaCompletada: true,
+            mensaje: '¡Correcto! Ya habías completado esta tarea, así que no suma puntos de nuevo.',
+          };
         }
-        console.error('Error al completar tarea:', error);
+        console.error('Error al guardar la tarea completada:', error);
         throw new Error('Error interno del servidor');
       }
+
+      return {
+        ...respuesta,
+        puntos: puntosTotales,
+        tiempo: tiempoFormateado,
+        mensaje: `¡Felicidades! Has completado la tarea "${tarea.titulo}" y ganado ${puntosTotales} puntos.`,
+      };
     },
   },
 };

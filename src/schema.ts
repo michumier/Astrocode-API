@@ -1,4 +1,4 @@
-import { gql } from 'apollo-server-express';
+import gql from 'graphql-tag';
 import { userTypeDefs } from './graphql/schemas/userSchema';
 import { categoriaTypeDefs } from './graphql/schemas/categoriaSchema';
 import { nivelTypeDefs } from './graphql/schemas/nivelSchema';

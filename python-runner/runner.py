@@ -1,113 +1,113 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Servidor Flask para ejecutar código Python de forma segura
+Servidor Flask para ejecutar código Python de los alumnos.
+
+Capas de aislamiento:
+  - Contenedor sin red exterior, sin acceso a la BD, sistema de archivos de solo lectura
+    y usuario sin privilegios (ver Dockerfile y docker-compose.yml).
+  - Cada ejecución corre en un proceso aparte con límites de CPU, memoria, procesos
+    y tamaño de archivos (resource.setrlimit), en un directorio temporal propio
+    y sin variables de entorno heredadas.
 """
 
 import os
-import tempfile
+import resource
+import shutil
 import subprocess
-import json
-from flask import Flask, request, jsonify
-from flask_cors import CORS
+import sys
+import tempfile
+
+from flask import Flask, jsonify, request
 
 app = Flask(__name__)
-CORS(app)  # Permitir CORS para el frontend
+
+TIMEOUT_SEGUNDOS = int(os.environ.get('RUNNER_TIMEOUT', '5'))
+MEMORIA_MAX_MB = int(os.environ.get('RUNNER_MEMORY_MB', '256'))
+MAX_CODIGO = 20_000          # caracteres
+MAX_SALIDA = 64 * 1024       # caracteres devueltos de stdout/stderr
+
+
+def limitar_recursos():
+    """Se ejecuta en el proceso hijo justo antes de lanzar el código del alumno."""
+    memoria = MEMORIA_MAX_MB * 1024 * 1024
+    resource.setrlimit(resource.RLIMIT_CPU, (TIMEOUT_SEGUNDOS, TIMEOUT_SEGUNDOS + 1))
+    resource.setrlimit(resource.RLIMIT_AS, (memoria, memoria))
+    resource.setrlimit(resource.RLIMIT_FSIZE, (1024 * 1024, 1024 * 1024))  # archivos de 1 MB máx.
+    resource.setrlimit(resource.RLIMIT_NPROC, (64, 64))                   # evita fork bombs
+    resource.setrlimit(resource.RLIMIT_NOFILE, (64, 64))
+    os.setsid()
+
+
+def recortar(texto):
+    if len(texto) > MAX_SALIDA:
+        return texto[:MAX_SALIDA] + '\n... (salida recortada)'
+    return texto
+
 
 @app.route('/run', methods=['POST'])
 def run_code():
     """
-    Endpoint para ejecutar código Python
-    Recibe: { "code": "código_python" }
+    Recibe: { "code": "código_python", "stdin": "entrada opcional" }
     Devuelve: { "stdout": "salida", "stderr": "errores", "exit_code": 0 }
     """
+    data = request.get_json(silent=True)
+    if not data or not isinstance(data.get('code'), str):
+        return jsonify({'stdout': '', 'stderr': 'Error: No se proporcionó código para ejecutar', 'exit_code': 1}), 400
+
+    code = data['code']
+    stdin = data.get('stdin') or ''
+    if len(code) > MAX_CODIGO:
+        return jsonify({'stdout': '', 'stderr': 'Error: el código es demasiado largo', 'exit_code': 1}), 400
+
+    workdir = tempfile.mkdtemp(prefix='run-')
     try:
-        # Obtener el código del request
-        data = request.get_json()
-        if not data or 'code' not in data:
-            return jsonify({
-                'stdout': '',
-                'stderr': 'Error: No se proporcionó código para ejecutar',
-                'exit_code': 1
-            }), 400
-        
-        code = data['code']
-        
-        # Crear archivo temporal para el código
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as temp_file:
-            temp_file.write(code)
-            temp_file_path = temp_file.name
-        
+        ruta = os.path.join(workdir, 'main.py')
+        with open(ruta, 'w', encoding='utf-8') as f:
+            f.write(code)
+
         try:
-            # Ejecutar el código con timeout de 5 segundos
             result = subprocess.run(
-                ['python', temp_file_path],
+                [sys.executable, '-I', '-B', ruta],  # -I: modo aislado, -B: sin .pyc
+                input=stdin,
                 capture_output=True,
                 text=True,
-                timeout=5,
-                cwd=tempfile.gettempdir()  # Ejecutar en directorio temporal por seguridad
+                encoding='utf-8',
+                errors='replace',
+                timeout=TIMEOUT_SEGUNDOS + 1,
+                cwd=workdir,
+                env={'PYTHONIOENCODING': 'utf-8', 'HOME': workdir, 'PATH': '/usr/local/bin:/usr/bin'},
+                preexec_fn=limitar_recursos,
             )
-            
-            # Preparar respuesta
-            response = {
-                'stdout': result.stdout,
-                'stderr': result.stderr,
-                'exit_code': result.returncode
-            }
-            
-            return jsonify(response)
-            
         except subprocess.TimeoutExpired:
-            # Manejar timeout
             return jsonify({
                 'stdout': '',
-                'stderr': 'Error: El código tardó más de 5 segundos en ejecutarse (timeout)',
-                'exit_code': 124  # Código estándar para timeout
+                'stderr': f'Error: El código tardó más de {TIMEOUT_SEGUNDOS} segundos en ejecutarse (timeout)',
+                'exit_code': 124,  # Código estándar para timeout
             })
-            
-        except Exception as e:
-            # Manejar otros errores de ejecución
-            return jsonify({
-                'stdout': '',
-                'stderr': f'Error interno al ejecutar el código: {str(e)}',
-                'exit_code': 1
-            })
-            
-        finally:
-            # Eliminar archivo temporal
-            try:
-                os.unlink(temp_file_path)
-            except OSError:
-                pass  # Ignorar errores al eliminar el archivo temporal
-                
-    except Exception as e:
-        # Manejar errores generales
-        return jsonify({
-            'stdout': '',
-            'stderr': f'Error del servidor: {str(e)}',
-            'exit_code': 1
-        }), 500
+
+        stderr = result.stderr
+        exit_code = result.returncode
+        # Proceso matado por superar el tiempo de CPU (SIGXCPU) o por memoria (SIGKILL)
+        if exit_code in (-24, -9):
+            stderr += '\nError: tu programa superó el límite de tiempo o de memoria.'
+            exit_code = 124 if exit_code == -24 else 137
+        elif 'MemoryError' in stderr:
+            stderr += f'\nPista: tu programa intentó usar más de {MEMORIA_MAX_MB} MB de memoria.'
+
+        return jsonify({'stdout': recortar(result.stdout), 'stderr': recortar(stderr), 'exit_code': exit_code})
+
+    except Exception as e:  # noqa: BLE001
+        return jsonify({'stdout': '', 'stderr': f'Error del servidor: {e}', 'exit_code': 1}), 500
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
+
 
 @app.route('/health', methods=['GET'])
 def health_check():
-    """
-    Endpoint de salud para verificar que el servicio está funcionando
-    """
-    return jsonify({
-        'status': 'healthy',
-        'service': 'python-runner',
-        'version': '1.0.0'
-    })
+    return jsonify({'status': 'healthy', 'service': 'python-runner', 'version': '2.0.0'})
+
 
 if __name__ == '__main__':
-    print("🐍 Iniciando servidor Python Runner...")
-    print("📡 Servidor disponible en http://localhost:5000")
-    print("🔗 Endpoint: POST /run")
-    print("💚 Health check: GET /health")
-    
-    # Ejecutar servidor Flask
-    app.run(
-        host='0.0.0.0',  # Permitir conexiones desde cualquier IP
-        port=5000,
-        debug=False  # Desactivar debug en producción
-    )
+    # Solo para desarrollo fuera de Docker; en el contenedor se usa gunicorn
+    app.run(host='0.0.0.0', port=5000, debug=False)

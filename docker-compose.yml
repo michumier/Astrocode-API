@@ -1,4 +1,4 @@
-version: '3.8'
+# Las contraseñas y secretos se leen del archivo .env (copia .env.example a .env)
 
 services:
   # Base de datos MySQL
@@ -6,62 +6,74 @@ services:
     image: mysql:8.0
     container_name: astrocode-mysql
     environment:
-      MYSQL_ROOT_PASSWORD: Michu@gamificado2025
-      MYSQL_DATABASE: astrocodebd
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:?Define DB_PASSWORD en el .env}
+      MYSQL_DATABASE: ${DB_NAME:-astrocodebd}
     ports:
-      - "3307:3306"
+      - "127.0.0.1:3307:3306" # solo accesible desde tu PC (MySQL Workbench, etc.)
     volumes:
       - mysql_data:/var/lib/mysql
       - ./src/db:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
     restart: unless-stopped
     networks:
-      - astrocode-network
+      - backend
 
-  # Contenedor para ejecutar código Python
+  # Contenedor aislado para ejecutar el código Python de los alumnos:
+  # sin internet, sin acceso a MySQL, solo lectura, sin privilegios y con límites
   python-runner:
     build:
       context: ./python-runner
       dockerfile: Dockerfile
     container_name: astrocode-python-runner
-    ports:
-      - "5000:5000"
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 128
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
     networks:
-      - astrocode-network
+      - runner # sin "ports": no se publica al exterior, solo la API lo ve
 
   # Backend GraphQL API
   astrocode-api:
     build:
       context: .
       dockerfile: Dockerfile
+      target: dev
     container_name: astrocode-api
+    env_file: .env
     ports:
-      - "4000:4000"
+      - "127.0.0.1:4000:4000"
     environment:
       - NODE_ENV=development
       - PORT=4000
-      - JWT_SECRET=${JWT_SECRET:-your-jwt-secret-here}
       - DB_HOST=mysql-db
+      - DB_PORT=3306
       - DB_USER=root
-      - DB_PASSWORD=Michu@gamificado2025
-      - DB_NAME=astrocodebd
+      - DB_NAME=${DB_NAME:-astrocodebd}
       - PYTHON_RUNNER_URL=http://python-runner:5000
+      - CORS_ORIGIN=http://localhost:3000
     depends_on:
-      - python-runner
-      - mysql-db
+      mysql-db:
+        condition: service_healthy
+      python-runner:
+        condition: service_started
     restart: unless-stopped
     networks:
-      - astrocode-network
-    # Montar el código fuente para desarrollo (opcional)
+      - backend
+      - runner
+    # Código fuente montado: los cambios en src/ recargan la API sola
     volumes:
       - ./src:/app/src
-      - ./package.json:/app/package.json
 
   # Frontend React
   astrocode-web:
@@ -70,25 +82,28 @@ services:
       dockerfile: Dockerfile
     container_name: astrocode-web
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
       - REACT_APP_API_URL=http://localhost:4000/graphql
       - WDS_SOCKET_PORT=0
+      - WATCHPACK_POLLING=true # recarga en caliente con volúmenes de Windows
     depends_on:
       - astrocode-api
     restart: unless-stopped
     networks:
-      - astrocode-network
-    # Montar el código fuente para desarrollo (opcional)
+      - backend
+    # Montar el código fuente para desarrollo
     volumes:
       - ../Astrocode-web/client/src:/app/src
       - ../Astrocode-web/client/public:/app/public
-      - ../Astrocode-web/client/package.json:/app/package.json
-      - ../Astrocode-web/client/tsconfig.json:/app/tsconfig.json
 
 networks:
-  astrocode-network:
+  backend:
     driver: bridge
+  # Red interna: sin salida a internet. Solo la API y el runner están en ella
+  runner:
+    driver: bridge
+    internal: true
 
 volumes:
   mysql_data:

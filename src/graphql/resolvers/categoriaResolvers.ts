@@ -1,32 +1,6 @@
 import { query } from '../../config/db';
 import { GraphQLError } from 'graphql';
-
-// Custom error classes for Apollo Server v4
-class UserInputError extends GraphQLError {
-  constructor(message: string) {
-    super(message, {
-      extensions: {
-        code: 'BAD_USER_INPUT',
-      },
-    });
-  }
-}
-
-class ForbiddenError extends GraphQLError {
-  constructor(message: string) {
-    super(message, {
-      extensions: {
-        code: 'FORBIDDEN',
-      },
-    });
-  }
-}
-
-// Context interface
-interface Context {
-  token?: string;
-  user?: any;
-}
+import { UserInputError, Context, requireAdmin } from '../errors';
 
 interface CrearCategoriaInput {
   nombre: string;
@@ -62,7 +36,7 @@ export const categoriaResolvers = {
         
         return result[0];
       } catch (error) {
-        if (error instanceof UserInputError) {
+        if (error instanceof GraphQLError) {
           throw error;
         }
         console.error('Error al obtener categoría:', error);
@@ -93,9 +67,7 @@ export const categoriaResolvers = {
       context: Context
     ) => {
       // Verificar autenticación
-      if (!context.user) {
-        throw new ForbiddenError('Debes estar autenticado para crear categorías');
-      }
+      requireAdmin(context);
 
       const { nombre, descripcion } = input;
 
@@ -129,7 +101,7 @@ export const categoriaResolvers = {
 
         return newCategory[0];
       } catch (error) {
-        if (error instanceof UserInputError) {
+        if (error instanceof GraphQLError) {
           throw error;
         }
         console.error('Error al crear categoría:', error);
@@ -144,9 +116,7 @@ export const categoriaResolvers = {
       context: Context
     ) => {
       // Verificar autenticación
-      if (!context.user) {
-        throw new ForbiddenError('Debes estar autenticado para actualizar categorías');
-      }
+      requireAdmin(context);
 
       const { nombre, descripcion } = input;
 
@@ -210,7 +180,7 @@ export const categoriaResolvers = {
 
         return updatedCategory[0];
       } catch (error) {
-        if (error instanceof UserInputError || error instanceof ForbiddenError) {
+        if (error instanceof GraphQLError) {
           throw error;
         }
         console.error('Error al actualizar categoría:', error);
@@ -225,9 +195,7 @@ export const categoriaResolvers = {
       context: Context
     ) => {
       // Verificar autenticación
-      if (!context.user) {
-        throw new ForbiddenError('Debes estar autenticado para eliminar categorías');
-      }
+      requireAdmin(context);
 
       try {
         // Verificar que la categoría existe
@@ -258,7 +226,7 @@ export const categoriaResolvers = {
 
         return result.affectedRows > 0;
       } catch (error) {
-        if (error instanceof UserInputError || error instanceof ForbiddenError) {
+        if (error instanceof GraphQLError) {
           throw error;
         }
         console.error('Error al eliminar categoría:', error);

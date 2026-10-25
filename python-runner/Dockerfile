@@ -1,20 +1,27 @@
 # Dockerfile para el contenedor python-runner
-FROM python:3.10-slim
+FROM python:3.12-slim
 
-# Establecer directorio de trabajo
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
 WORKDIR /app
 
-# Copiar archivos de dependencias
-COPY requirements.txt .
-
 # Instalar dependencias
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copiar el código de la aplicación
 COPY runner.py .
 
-# Exponer el puerto 5000
+# Usuario sin privilegios: el código de los alumnos nunca corre como root
+RUN useradd --create-home --uid 10001 runner
+USER runner
+
 EXPOSE 5000
 
-# Comando para ejecutar la aplicación
-CMD ["python", "runner.py"]
+# Healthcheck sin curl (no viene en la imagen slim)
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:5000/health', timeout=3)"
+
+# gunicorn: varias peticiones a la vez (varios alumnos ejecutando código)
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--threads", "4", "--timeout", "30", "runner:app"]

@@ -1,4 +1,4 @@
-import { gql } from 'apollo-server-express';
+import gql from 'graphql-tag';
 
 export const userTypeDefs = gql`
   type Usuario {
@@ -7,7 +7,15 @@ export const userTypeDefs = gql`
     correo_electronico: String!
     nombre_completo: String
     puntos: Int
+    rol: String
     creado_el: String
+  }
+
+  type RankingEntry {
+    id: ID!
+    nombre_usuario: String!
+    puntos: Int!
+    posicion: Int!
   }
 
   input CrearUsuarioInput {
@@ -21,7 +29,6 @@ export const userTypeDefs = gql`
     nombre_usuario: String
     correo_electronico: String
     nombre_completo: String
-    puntos: Int
   }
 
   input LoginInput {
@@ -40,8 +47,11 @@ export const userTypeDefs = gql`
   }
 
   extend type Query {
-    # Obtener todos los usuarios
+    # Obtener todos los usuarios (solo admin)
     usuarios: [Usuario!]!
+
+    # Ranking público (sin emails)
+    ranking(limite: Int): [RankingEntry!]!
     
     # Obtener un usuario por ID
     usuario(id: ID!): Usuario

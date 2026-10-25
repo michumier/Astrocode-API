@@ -1,32 +1,6 @@
 import { query } from '../../config/db';
 import { GraphQLError } from 'graphql';
-
-// Custom error classes for Apollo Server v4
-class UserInputError extends GraphQLError {
-  constructor(message: string) {
-    super(message, {
-      extensions: {
-        code: 'BAD_USER_INPUT',
-      },
-    });
-  }
-}
-
-class ForbiddenError extends GraphQLError {
-  constructor(message: string) {
-    super(message, {
-      extensions: {
-        code: 'FORBIDDEN',
-      },
-    });
-  }
-}
-
-// Context interface
-interface Context {
-  token?: string;
-  user?: any;
-}
+import { UserInputError, Context, requireAdmin } from '../errors';
 
 interface CrearNivelInput {
   nombre: string;
@@ -64,7 +38,7 @@ export const nivelResolvers = {
         
         return result[0];
       } catch (error) {
-        if (error instanceof UserInputError) {
+        if (error instanceof GraphQLError) {
           throw error;
         }
         console.error('Error al obtener nivel:', error);
@@ -109,9 +83,7 @@ export const nivelResolvers = {
       context: Context
     ) => {
       // Verificar autenticación
-      if (!context.user) {
-        throw new ForbiddenError('Debes estar autenticado para crear niveles');
-      }
+      requireAdmin(context);
 
       const { nombre, puntos, descripcion } = input;
 
@@ -160,7 +132,7 @@ export const nivelResolvers = {
 
         return newLevel[0];
       } catch (error) {
-        if (error instanceof UserInputError) {
+        if (error instanceof GraphQLError) {
           throw error;
         }
         console.error('Error al crear nivel:', error);
@@ -175,9 +147,7 @@ export const nivelResolvers = {
       context: Context
     ) => {
       // Verificar autenticación
-      if (!context.user) {
-        throw new ForbiddenError('Debes estar autenticado para actualizar niveles');
-      }
+      requireAdmin(context);
 
       const { nombre, puntos, descripcion } = input;
 
@@ -263,7 +233,7 @@ export const nivelResolvers = {
 
         return updatedLevel[0];
       } catch (error) {
-        if (error instanceof UserInputError || error instanceof ForbiddenError) {
+        if (error instanceof GraphQLError) {
           throw error;
         }
         console.error('Error al actualizar nivel:', error);
@@ -278,9 +248,7 @@ export const nivelResolvers = {
       context: Context
     ) => {
       // Verificar autenticación
-      if (!context.user) {
-        throw new ForbiddenError('Debes estar autenticado para eliminar niveles');
-      }
+      requireAdmin(context);
 
       try {
         // Verificar que el nivel existe
@@ -321,7 +289,7 @@ export const nivelResolvers = {
 
         return result.affectedRows > 0;
       } catch (error) {
-        if (error instanceof UserInputError || error instanceof ForbiddenError) {
+        if (error instanceof GraphQLError) {
           throw error;
         }
         console.error('Error al eliminar nivel:', error);

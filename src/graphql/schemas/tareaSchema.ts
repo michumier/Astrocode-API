@@ -1,4 +1,4 @@
-import { gql } from 'apollo-server-express';
+import gql from 'graphql-tag';
 
 export const tareaTypeDefs = gql`
   type Tarea {
@@ -87,17 +87,19 @@ export const tareaTypeDefs = gql`
     # Actualizar una tarea existente
     actualizarTarea(id: ID!, input: ActualizarTareaInput!): Tarea!
     
-    # Marcar tarea como completada
-    completarTarea(tareaId: ID!, tiempoCompletado: Int!): CompletarTareaResponse!
+    # Enviar una solución: el servidor ejecuta el código, lo corrige y suma los puntos
+    enviarSolucion(tareaId: ID!, codigo: String!, tiempoCompletado: Int!): ResultadoSolucion!
     
     # Eliminar una tarea
     eliminarTarea(id: ID!): Boolean!
   }
 
-  type CompletarTareaResponse {
-    success: Boolean!
+  type ResultadoSolucion {
+    correcto: Boolean!
+    yaCompletada: Boolean!
     puntos: Int!
-    tiempo: String!
+    tiempo: String
     mensaje: String!
+    ejecucion: ExecutionResult!
   }
 `;

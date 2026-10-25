@@ -2,37 +2,8 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { query } from '../../config/db';
 import { GraphQLError } from 'graphql';
-
-// Custom error classes for Apollo Server v4
-class AuthenticationError extends GraphQLError {
-  constructor(message: string) {
-    super(message, {
-      extensions: {
-        code: 'UNAUTHENTICATED',
-      },
-    });
-  }
-}
-
-class UserInputError extends GraphQLError {
-  constructor(message: string) {
-    super(message, {
-      extensions: {
-        code: 'BAD_USER_INPUT',
-      },
-    });
-  }
-}
-
-class ForbiddenError extends GraphQLError {
-  constructor(message: string) {
-    super(message, {
-      extensions: {
-        code: 'FORBIDDEN',
-      },
-    });
-  }
-}
+import { UserInputError, ForbiddenError, AuthenticationError, Context, requireAuth, requireAdmin, mismoId } from '../errors';
+import { transaction } from '../../config/db';
 
 interface Usuario {
   id: string;
@@ -40,6 +11,7 @@ interface Usuario {
   correo_electronico: string;
   nombre_completo?: string;
   puntos: number;
+  rol: string;
   creado_el: string;
 }
 
@@ -50,11 +22,11 @@ interface CrearUsuarioInput {
   nombre_completo?: string;
 }
 
+// Los puntos NO se pueden editar desde aquí: solo se ganan resolviendo ejercicios
 interface ActualizarUsuarioInput {
   nombre_usuario?: string;
   correo_electronico?: string;
   nombre_completo?: string;
-  puntos?: number;
 }
 
 interface LoginInput {
@@ -62,41 +34,28 @@ interface LoginInput {
   contrasena: string;
 }
 
-interface Context {
-  token?: string;
-  user?: Usuario;
-}
+const CAMPOS_USUARIO = 'id, nombre_usuario, correo_electronico, nombre_completo, puntos, rol, creado_el';
+
+const getJwtSecret = (): string => {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error('Falta la variable de entorno JWT_SECRET');
+  }
+  return secret;
+};
 
 // Función para generar JWT
 const generateToken = (usuario: Usuario): string => {
-  return jwt.sign(
-    { 
-      id: usuario.id, 
-      correo_electronico: usuario.correo_electronico 
-    },
-    process.env.JWT_SECRET || 'tu-secreto-jwt',
-    { expiresIn: '7d' }
-  );
+  return jwt.sign({ id: usuario.id }, getJwtSecret(), { expiresIn: '7d' });
 };
 
 // Función para verificar JWT
 const verifyToken = (token: string): any => {
+  const tokenWithoutBearer = token.startsWith('Bearer ') ? token.substring(7) : token;
   try {
-    // Asegurarse de que el token tenga el formato correcto
-    const tokenWithoutBearer = token.startsWith('Bearer ') ? token.substring(7) : token;
-    
-    // Verificar que el token tenga el formato correcto (tres partes separadas por puntos)
-    const tokenParts = tokenWithoutBearer.split('.');
-    if (tokenParts.length !== 3) {
-      console.error('verifyToken: Formato de token inválido, no tiene tres partes');
-      throw new AuthenticationError('Formato de token inválido');
-    }
-    
-    // Verificar el token con la clave secreta
-    return jwt.verify(tokenWithoutBearer, process.env.JWT_SECRET || 'tu-secreto-jwt');
-  } catch (error) {
-    console.error('verifyToken: Error al verificar token:', error);
-    throw new AuthenticationError('Token inválido');
+    return jwt.verify(tokenWithoutBearer, getJwtSecret());
+  } catch {
+    throw new AuthenticationError('Token inválido o caducado');
   }
 };
 
@@ -110,94 +69,65 @@ const formatUsuarioFechas = (usuario: any) => {
 
 // Función para obtener usuario del contexto
 export const getUsuarioFromToken = async (token: string): Promise<Usuario> => {
-  console.log('getUsuarioFromToken: Iniciando verificación de token');
-  console.log(`getUsuarioFromToken: Token recibido: ${token ? token.substring(0, 20) + '...' : 'No presente'}`);
-  
   if (!token) {
-    console.error('getUsuarioFromToken: No se proporcionó token');
     throw new AuthenticationError('Token requerido');
   }
-  
-  try {
-    // Verificar y decodificar el token
-    const decoded = verifyToken(token);
-    console.log('getUsuarioFromToken: Token verificado correctamente');
-    console.log('getUsuarioFromToken: Payload del token:', JSON.stringify(decoded, null, 2));
-    
-    // Buscar el usuario en la base de datos
-    const usuarios = await query(
-      'SELECT id, nombre_usuario, correo_electronico, nombre_completo, puntos, creado_el FROM usuarios WHERE id = ?',
-      [decoded.id]
-    ) as Usuario[];
-    
-    if (!usuarios.length) {
-      console.error(`getUsuarioFromToken: Usuario con ID ${decoded.id} no encontrado en la base de datos`);
-      throw new AuthenticationError('Usuario no encontrado');
-    }
-    
-    console.log(`getUsuarioFromToken: Usuario encontrado: ${usuarios[0].nombre_usuario} (ID: ${usuarios[0].id})`);
-    return formatUsuarioFechas(usuarios[0]);
-  } catch (error) {
-    console.error('getUsuarioFromToken: Error al procesar el token:', error);
-    throw error; // Reenviar el error para que sea manejado por el contexto de Apollo
+
+  const decoded = verifyToken(token);
+  const usuarios = await query(
+    `SELECT ${CAMPOS_USUARIO} FROM usuarios WHERE id = ?`,
+    [decoded.id]
+  ) as Usuario[];
+
+  if (!usuarios.length) {
+    throw new AuthenticationError('Usuario no encontrado');
   }
+
+  return formatUsuarioFechas(usuarios[0]);
 };
 
 export const userResolvers = {
   Query: {
-    // Obtener todos los usuarios
-    usuarios: async (): Promise<Usuario[]> => {
-      try {
-        // console.log('Intentando conectar a la base de datos...');
-        // Verificar conexión y base de datos
-        // const dbCheck = await query('SELECT DATABASE() as current_db') as any[];
-        // console.log('Base de datos actual:', dbCheck[0].current_db);
-        // const tablesCheck = await query(
-        //   "SHOW TABLES FROM astrocodebd"
-        // ) as any[];
-        // console.log('Tablas disponibles:', tablesCheck.map(t => Object.values(t)[0]));
-        // const tableCheck = await query(
-        //   "SELECT COUNT(*) as count FROM information_schema.tables WHERE table_schema = 'astrocodebd' AND table_name = 'usuarios'"
-        // ) as any[];
-        // console.log('Verificación de tabla usuarios:', tableCheck[0].count);
-        // if (tableCheck[0].count === 0) {
-        //   throw new Error('La tabla usuarios no se encuentra en la base de datos astrocodebd.');
-        // }
-        const usuarios = await query(
-          'SELECT id, nombre_usuario, correo_electronico, nombre_completo, puntos, creado_el FROM usuarios ORDER BY creado_el DESC'
-        ) as Usuario[];
-        // console.log('Usuarios obtenidos:', usuarios.length);
-        return usuarios.map(formatUsuarioFechas);
-      } catch (error) {
-        console.error('Error detallado al obtener usuarios:', error);
-        throw new Error(`Error al obtener usuarios: ${(error as Error).message}`);
-      }
+    // Obtener todos los usuarios (solo admin: incluye emails)
+    usuarios: async (_: any, __: any, context: Context): Promise<Usuario[]> => {
+      requireAdmin(context);
+      const usuarios = await query(
+        `SELECT ${CAMPOS_USUARIO} FROM usuarios ORDER BY creado_el DESC`
+      ) as Usuario[];
+      return usuarios.map(formatUsuarioFechas);
     },
 
-    // Obtener un usuario por ID
-    usuario: async (_: any, { id }: { id: string }): Promise<Usuario | null> => {
-      try {
-        const usuarios = await query(
-          'SELECT id, nombre_usuario, correo_electronico, nombre_completo, puntos, creado_el FROM usuarios WHERE id = ?',
-          [id]
-        ) as Usuario[];
-        return usuarios.length ? usuarios[0] : null;
-      } catch (error) {
-        throw new Error('Error al obtener usuario');
-      }
+    // Ranking público: solo nombre de usuario y puntos, nunca emails
+    ranking: async (_: any, { limite = 50 }: { limite?: number }) => {
+      const limiteSeguro = Math.min(Math.max(Math.floor(limite), 1), 100);
+      const filas = await query(
+        `SELECT id, nombre_usuario, COALESCE(puntos, 0) AS puntos
+         FROM usuarios ORDER BY puntos DESC, creado_el ASC LIMIT ${limiteSeguro}`
+      ) as any[];
+      return filas.map((fila, i) => ({ ...fila, posicion: i + 1 }));
     },
 
-    // Obtener usuario por email
-    usuarioPorEmail: async (_: any, { correo_electronico }: { correo_electronico: string }): Promise<Usuario | null> => {
-      try {
-        const usuarios = await query(
-          'SELECT id, nombre_usuario, correo_electronico, nombre_completo, puntos, creado_el FROM usuarios WHERE correo_electronico = ?',
-          [correo_electronico]
-        ) as Usuario[];
-        return usuarios.length ? usuarios[0] : null;
-      } catch (error) {
-        throw new Error('Error al obtener usuario por email');
+    // Obtener un usuario por ID (el propio usuario o un admin)
+    usuario: async (_: any, { id }: { id: string }, context: Context): Promise<Usuario | null> => {
+      const actual = requireAuth(context);
+      if (!mismoId(actual.id, id) && actual.rol !== 'admin') {
+        throw new ForbiddenError('No puedes ver los datos de otro usuario');
       }
+      const usuarios = await query(
+        `SELECT ${CAMPOS_USUARIO} FROM usuarios WHERE id = ?`,
+        [id]
+      ) as Usuario[];
+      return usuarios.length ? formatUsuarioFechas(usuarios[0]) : null;
+    },
+
+    // Obtener usuario por email (solo admin)
+    usuarioPorEmail: async (_: any, { correo_electronico }: { correo_electronico: string }, context: Context): Promise<Usuario | null> => {
+      requireAdmin(context);
+      const usuarios = await query(
+        `SELECT ${CAMPOS_USUARIO} FROM usuarios WHERE correo_electronico = ?`,
+        [correo_electronico]
+      ) as Usuario[];
+      return usuarios.length ? formatUsuarioFechas(usuarios[0]) : null;
     },
 
     // Obtener el usuario actual (autenticado)
@@ -285,13 +215,13 @@ export const userResolvers = {
 
         // Obtener el usuario creado
         const usuarios = await query(
-          'SELECT id, nombre_usuario, correo_electronico, nombre_completo, puntos, creado_el FROM usuarios WHERE id = ?',
+          `SELECT ${CAMPOS_USUARIO} FROM usuarios WHERE id = ?`,
           [resultado.insertId]
         ) as Usuario[];
 
         return usuarios[0];
       } catch (error) {
-        if (error instanceof UserInputError) {
+        if (error instanceof GraphQLError) {
           throw error;
         }
         throw new Error('Error al crear usuario');
@@ -307,7 +237,7 @@ export const userResolvers = {
         const usuarioActual = context.user;
         
         // Solo el propio usuario puede actualizarse (o implementar roles de admin)
-        if (usuarioActual.id.toString() !== id.toString()) {
+        if (!mismoId(usuarioActual.id, id)) {
           throw new ForbiddenError('No tienes permisos para actualizar este usuario');
         }
 
@@ -363,10 +293,6 @@ export const userResolvers = {
           campos.push('nombre_completo = ?');
           valores.push(input.nombre_completo);
         }
-        if (input.puntos !== undefined) {
-          campos.push('puntos = ?');
-          valores.push(input.puntos);
-        }
 
         if (campos.length === 0) {
           throw new UserInputError('No hay campos para actualizar');
@@ -385,7 +311,7 @@ export const userResolvers = {
 
         // Obtener el usuario actualizado
         const usuarios = await query(
-          'SELECT id, nombre_usuario, correo_electronico, nombre_completo, puntos, creado_el FROM usuarios WHERE id = ?',
+          `SELECT ${CAMPOS_USUARIO} FROM usuarios WHERE id = ?`,
           [id]
         ) as Usuario[];
 
@@ -395,7 +321,7 @@ export const userResolvers = {
 
         return usuarios[0];
       } catch (error) {
-        if (error instanceof ForbiddenError || error instanceof UserInputError) {
+        if (error instanceof GraphQLError) {
           throw error;
         }
         console.error('Error en actualizarUsuario:', error);
@@ -411,19 +337,20 @@ export const userResolvers = {
         }
         const usuarioActual = context.user;
         
-        // Solo el propio usuario puede eliminarse (o implementar roles de admin)
-        if (usuarioActual.id !== id) {
+        // Solo el propio usuario o un admin pueden eliminar la cuenta
+        if (!mismoId(usuarioActual.id, id) && usuarioActual.rol !== 'admin') {
           throw new ForbiddenError('No tienes permisos para eliminar este usuario');
         }
 
-        const resultado = await query(
-          'DELETE FROM usuarios WHERE id = ?',
-          [id]
-        ) as any;
-
-        return resultado.affectedRows > 0;
+        // Borrar primero los datos que dependen del usuario (claves foráneas)
+        return await transaction(async (conn) => {
+          await conn.execute('DELETE FROM tareas_usuarios WHERE usuario_id = ?', [id]);
+          await conn.execute('DELETE FROM insignias_usuarios WHERE usuario_id = ?', [id]);
+          const [resultado] = await conn.execute('DELETE FROM usuarios WHERE id = ?', [id]) as any;
+          return resultado.affectedRows > 0;
+        });
       } catch (error) {
-        if (error instanceof ForbiddenError) {
+        if (error instanceof GraphQLError) {
           throw error;
         }
         throw new Error('Error al eliminar usuario');
@@ -435,7 +362,7 @@ export const userResolvers = {
       try {
         // Buscar usuario por email
         const usuarios = await query(
-          'SELECT id, nombre_usuario, correo_electronico, contrasena_hash, nombre_completo, puntos, creado_el FROM usuarios WHERE correo_electronico = ?',
+          `SELECT ${CAMPOS_USUARIO}, contrasena_hash FROM usuarios WHERE correo_electronico = ?`,
           [input.correo_electronico]
         ) as any[];
 
@@ -462,7 +389,7 @@ export const userResolvers = {
           usuario: formatUsuarioFechas(usuarioSinHash)
         };
       } catch (error) {
-        if (error instanceof AuthenticationError) {
+        if (error instanceof GraphQLError) {
           throw error;
         }
         throw new Error('Error en el login');
@@ -482,7 +409,7 @@ export const userResolvers = {
         const usuarioActual = context.user;
         
         // Solo el propio usuario puede cambiar su contraseña
-        if (usuarioActual.id !== id) {
+        if (!mismoId(usuarioActual.id, id)) {
           throw new ForbiddenError('No tienes permisos para cambiar esta contraseña');
         }
 
@@ -513,7 +440,7 @@ export const userResolvers = {
 
         return resultado.affectedRows > 0;
       } catch (error) {
-        if (error instanceof ForbiddenError || error instanceof AuthenticationError) {
+        if (error instanceof GraphQLError) {
           throw error;
         }
         throw new Error('Error al cambiar contraseña');
