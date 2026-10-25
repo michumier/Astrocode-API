@@ -14,8 +14,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Compilar TypeScript
-        run: npm run build
+      - name: Compilar TypeScript y pruebas unitarias
+        run: npm test
 
   docker:
     runs-on: ubuntu-latest
@@ -33,3 +33,21 @@ jobs:
             -d '{"code":"print(sum([1,2,3]))"}' | grep -qF '"stdout":"6'
           curl -sf -X POST localhost:5000/run -H 'Content-Type: application/json' \
             -d '{"code":"while True: pass"}' | grep -q '"exit_code":124'
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # docker-compose.yml hace referencia a ../Astrocode-web (no se arranca, pero la ruta tiene que existir)
+      - name: Clonar la web al lado
+        run: git clone --depth 1 https://github.com/michumier/Astrocode-web.git ../Astrocode-web
+      - name: .env de pruebas
+        run: |
+          cp .env.example .env
+          sed -i "s/^JWT_SECRET=.*/JWT_SECRET=$(openssl rand -hex 32)/" .env
+          sed -i "s/^DB_PASSWORD=.*/DB_PASSWORD=ci$(openssl rand -hex 12)/" .env
+      - name: Pruebas e2e contra el stack en Docker
+        run: npm run e2e:docker

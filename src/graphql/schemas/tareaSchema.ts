@@ -3,6 +3,8 @@ import gql from 'graphql-tag';
 export const tareaTypeDefs = gql`
   type Tarea {
     id: ID!
+    # codigo | sabotaje | pilotaje
+    tipo: String!
     categoria: Categoria!
     nivel: Nivel!
     titulo: String!
@@ -90,6 +92,9 @@ export const tareaTypeDefs = gql`
 
     # Obtener el reto diario
     dailyChallenge: Tarea
+
+    # Historial de envíos del usuario autenticado en una tarea (más reciente primero)
+    misIntentos(tareaId: ID!, limite: Int): [Intento!]!
   }
 
   extend type Mutation {
@@ -104,6 +109,18 @@ export const tareaTypeDefs = gql`
     
     # Eliminar una tarea
     eliminarTarea(id: ID!): Boolean!
+  }
+
+  type Intento {
+    id: ID!
+    codigo: String!
+    correcto: Boolean!
+    testsSuperados: Int
+    testsTotales: Int
+    # NameError, IndentationError, Timeout, TestsFallidos, SalidaIncorrecta...
+    tipoError: String
+    segundosEnTarea: Int
+    creadoEl: String!
   }
 
   type ResultadoTest {

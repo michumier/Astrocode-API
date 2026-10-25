@@ -1,0 +1,31 @@
+# Override para las pruebas e2e: se usa junto a docker-compose.yml con un nombre de proyecto propio
+# (astrocode-e2e), así que tiene su propia base de datos y no toca la de desarrollo.
+#   node test/e2e/docker.mjs
+services:
+  mysql-db:
+    container_name: !reset null
+    ports: !reset []
+  python-runner:
+    container_name: !reset null
+  astrocode-api:
+    container_name: !reset null
+    ports: !override
+      - "127.0.0.1:${E2E_API_PORT:-4100}:4000"
+    environment:
+      # IA falsa: las pruebas nunca llaman a NVIDIA de verdad
+      - NVIDIA_API_KEY=clave-falsa-de-prueba
+      - NVIDIA_BASE_URL=http://mock-ia:8787/v1
+      - ADMIN_EMAILS=admin-e2e@example.test
+      - RATE_LIMIT_PER_MIN=5000
+    depends_on:
+      mock-ia:
+        condition: service_started
+  astrocode-web:
+    container_name: !reset null
+  mock-ia:
+    image: node:22-alpine
+    command: ["node", "/e2e/mock-ia.mjs"]
+    volumes:
+      - ./test/e2e:/e2e:ro
+    networks:
+      - backend

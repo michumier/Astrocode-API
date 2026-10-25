@@ -55,5 +55,8 @@ Sin acceso a internet ni a MySQL, sistema de archivos de solo lectura, usuario s
 ## Tests
 
 ```bash
-npm test   # tests de integración contra la API en marcha (localhost:4000)
+npm test             # compila y ejecuta las pruebas unitarias
+npm run e2e:docker   # levanta un stack aislado (proyecto astrocode-e2e, con IA falsa) y ejecuta las pruebas e2e
 ```
+
+`e2e:docker` no toca tu base de datos de desarrollo: usa su propio volumen y lo borra al terminar (`MANTENER=1` para dejarlo levantado). Los planes de prueba de cada fase están en `docs/pruebas/`.

@@ -89,7 +89,39 @@ const migraciones: Migracion[] = [
     id: '007_descripcion_niveles',
     sql: 'ALTER TABLE niveles ADD COLUMN descripcion TEXT NULL',
   },
+  {
+    // Cada envío de solución (para el puente de mando y la repetición de intentos)
+    id: '008_intentos',
+    sql: `CREATE TABLE intentos (
+      id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      usuario_id BIGINT NOT NULL,
+      tarea_id BIGINT NOT NULL,
+      codigo MEDIUMTEXT NOT NULL,
+      correcto TINYINT(1) NOT NULL,
+      tests_superados INT NULL,
+      tests_totales INT NULL,
+      tipo_error VARCHAR(50) NULL,
+      segundos_en_tarea INT NULL,
+      creado_el TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+      KEY tarea_fecha (tarea_id, creado_el),
+      KEY usuario_fecha (usuario_id, creado_el),
+      CONSTRAINT intentos_ibfk_1 FOREIGN KEY (usuario_id) REFERENCES usuarios (id) ON DELETE CASCADE,
+      CONSTRAINT intentos_ibfk_2 FOREIGN KEY (tarea_id) REFERENCES tareas (id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`,
+  },
+  {
+    // Tipos de tarea: 'codigo' (las de siempre), 'sabotaje' y 'pilotaje' (fases 1 y 2)
+    id: '009_tipo_config_tareas',
+    sql: "ALTER TABLE tareas ADD COLUMN tipo VARCHAR(20) NOT NULL DEFAULT 'codigo', ADD COLUMN config JSON NULL",
+  },
 ];
+
+// Días que se guardan los intentos (privacidad). Se limpian al arrancar la API.
+const RETENCION_INTENTOS_DIAS = Number(process.env.RETENCION_INTENTOS_DIAS || 180);
+
+export async function limpiarIntentosAntiguos() {
+  await pool.query('DELETE FROM intentos WHERE creado_el < NOW() - INTERVAL ? DAY', [RETENCION_INTENTOS_DIAS]);
+}
 
 export async function aplicarMigraciones() {
   await pool.query(`
