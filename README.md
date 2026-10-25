@@ -1,202 +1,59 @@
-<div align="center">
-  <img src="../Astrocode-web/client/img/Logo.png" alt="AstroCode Logo" width="200" height="200" style="border-radius: 50%; object-fit: cover;">
-  
-  # 🛡️ AstroCode API
-  
-  **Backend GraphQL API para la plataforma AstroCode**
-  
-  Una robusta API construida con Node.js y GraphQL para gestionar datos y lógica de negocio.
-</div>
+# 🛡️ AstroCode API
 
-## 📋 Descripción
+Backend GraphQL de AstroCode: Node.js + TypeScript + Apollo Server + MySQL, con un contenedor aislado (`python-runner`) que ejecuta el código Python de los alumnos.
 
-AstroCode API es el backend de la plataforma AstroCode, proporcionando una interfaz GraphQL segura y eficiente. La API maneja:
+## Arrancar con Docker (recomendado)
 
-- 🔐 **Autenticación y autorización**: JWT tokens y gestión de sesiones
-- 👥 **Gestión de usuarios**: CRUD completo de usuarios y perfiles
-- 📊 **Gestión de datos**: Almacenamiento y recuperación de información
-- 🔒 **Seguridad**: Validación de datos y protección contra ataques
-
-## 🛠️ Tecnologías
-
-- **Node.js** - Runtime de JavaScript
-- **TypeScript** - Tipado estático
-- **GraphQL** - API query language
-- **Apollo Server** - Servidor GraphQL
-- **JWT** - Autenticación basada en tokens
-- **bcrypt** - Encriptación de contraseñas
-
-## 🚀 Instalación y Configuración
-
-### Prerrequisitos
-
-- Node.js (versión 16 o superior)
-- npm o yarn
-- Base de datos (MongoDB/PostgreSQL)
-- Git
-
-### Pasos de instalación
-
-1. **Clonar el repositorio**
-   ```bash
-   git clone <url-del-repositorio>
-   cd Astrocode-API
-   ```
-
-2. **Instalar dependencias**
-   ```bash
-   npm install
-   ```
-
-3. **Configurar variables de entorno**
-   ```bash
-   # Crear archivo .env
-   PORT=4001
-   JWT_SECRET=tu_jwt_secret_aqui
-   DB_CONNECTION_STRING=tu_string_de_conexion_db
-   NODE_ENV=development
-   ```
-
-4. **Configurar base de datos**
-   ```bash
-   # Ejecutar migraciones si es necesario
-   npm run migrate
-   ```
-
-5. **Iniciar el servidor**
-   ```bash
-   npm start
-   ```
-
-6. **Acceder a GraphQL Playground**
-   ```
-   http://localhost:4001/graphql
-   ```
-
-## 📁 Estructura del Proyecto
-
-```
-Astrocode-API/
-├── src/                   # Código fuente
-│   ├── config/           # Configuraciones
-│   ├── db/               # Configuración de base de datos
-│   ├── graphql/          # Esquemas y resolvers GraphQL
-│   │   ├── resolvers/    # Resolvers de GraphQL
-│   │   ├── typeDefs/     # Definiciones de tipos
-│   │   └── schema.ts     # Esquema principal
-│   ├── middleware/       # Middlewares personalizados
-│   ├── models/           # Modelos de datos
-│   ├── utils/            # Utilidades y helpers
-│   ├── index.ts          # Punto de entrada
-│   └── schema.ts         # Configuración del esquema
-├── .gitignore            # Archivos ignorados por Git
-├── package.json          # Dependencias y scripts
-├── tsconfig.json         # Configuración TypeScript
-└── README.md             # Este archivo
-```
-
-## 🔧 Scripts Disponibles
+Las carpetas `Astrocode-API` y `Astrocode-web` tienen que estar una al lado de la otra.
 
 ```bash
-# Iniciar servidor de desarrollo
-npm start
-
-# Iniciar con nodemon (desarrollo)
-npm run dev
-
-# Construir para producción
-npm run build
-
-# Ejecutar tests
-npm test
-
-# Linting
-npm run lint
-
-# Formatear código
-npm run format
+cp .env.example .env      # y rellena JWT_SECRET, DB_PASSWORD y ADMIN_EMAILS
+docker compose up --build # o start-local.bat en Windows
 ```
 
-## 📊 Esquema GraphQL
+| Servicio | URL |
+|---|---|
+| Web | http://localhost:3000 |
+| API GraphQL | http://localhost:4000/graphql |
+| Health check | http://localhost:4000/health |
+| MySQL (Workbench) | localhost:3307 |
 
-La API expone los siguientes tipos principales:
+Los cambios en `src/` (API) y en `client/src/` (web) se recargan solos.
 
-### Mutations
-- `login(input: LoginInput!)`: Autenticación de usuario
-- `register(input: RegisterInput!)`: Registro de nuevo usuario
-- `updateUser(input: UpdateUserInput!)`: Actualización de perfil
+## Base de datos
 
-### Queries
-- `me`: Información del usuario actual
-- `users`: Lista de usuarios (admin)
-- `user(id: ID!)`: Usuario específico
+- `src/db/BD Astrocode.sql` crea las tablas y los datos iniciales **solo la primera vez** (cuando el volumen de MySQL está vacío).
+- Los cambios de esquema posteriores van en `src/db/migrations.ts`: la API aplica las migraciones pendientes al arrancar.
+- Para empezar de cero (borra todos los datos): `docker compose down -v`.
 
-### Types
-- `User`: Información de usuario
-- `AuthPayload`: Respuesta de autenticación
-- `LoginInput`: Datos de login
-- `RegisterInput`: Datos de registro
+## Roles
 
-## 🔒 Autenticación
+Los usuarios son `alumno` por defecto. Los emails que pongas en `ADMIN_EMAILS` reciben el rol `admin` al arrancar la API. Solo un admin puede crear, editar o borrar ejercicios, categorías y niveles, o ver la lista de usuarios con emails.
 
-La API utiliza JWT (JSON Web Tokens) para la autenticación:
+## Corrección de ejercicios
 
-1. **Login**: Envía credenciales y recibe un token
-2. **Autorización**: Incluye el token en el header `Authorization: Bearer <token>`
-3. **Validación**: El middleware valida el token en cada request protegido
+`enviarSolucion(tareaId, codigo, tiempoCompletado)` corrige **en el servidor** y solo entonces suma los puntos (en una transacción):
 
-## 🌐 Conexión con el Frontend
+- Si la tarea tiene **tests** (tabla `tests_tarea`), ejecuta el código del alumno seguido de cada test. Los tests ocultos no muestran sus datos, así que no vale con imprimir el resultado esperado.
+- Si no tiene tests, compara la salida del programa con `resultado_esperado`.
 
-El frontend se conecta a esta API en `http://localhost:4001/graphql`. Asegúrate de que:
+`executeCode` sirve para probar código sin corregir. La solución de referencia de cada tarea (`solucion`) nunca se envía al cliente.
 
-- El servidor esté ejecutándose en el puerto 4001
-- CORS esté configurado para permitir requests desde `http://localhost:3001`
-- Las variables de entorno estén correctamente configuradas
+## IA (opcional, NVIDIA)
 
-## 🧪 Testing
+Con `NVIDIA_API_KEY` en el `.env` (clave gratuita en [build.nvidia.com](https://build.nvidia.com)) se activan:
+
+- **Pistas para alumnos** (`pedirPista`): 3 niveles, de conceptual a muy concreta, con un límite diario por alumno (`PISTAS_POR_DIA`). La IA recibe la solución de referencia para entender el ejercicio, pero tiene prohibido revelarla, y además un filtro bloquea cualquier respuesta que copie líneas de la solución.
+- **Generador de ejercicios para admins** (`generarEjercicio`, y en la web: Perfil → Panel de admin): la IA propone enunciado, código base, solución y tests. Cada test se **comprueba en el sandbox** con la solución y se descartan los incorrectos. No se guarda nada hasta que el admin lo revisa.
+
+La IA nunca decide los puntos: corregir con tests es determinista y no se puede engañar con instrucciones en el código. El modelo se cambia con `NVIDIA_MODEL`, y sirve cualquier API compatible con OpenAI cambiando `NVIDIA_BASE_URL`. Sin clave, todo lo demás funciona igual.
+
+## Python runner
+
+Sin acceso a internet ni a MySQL, sistema de archivos de solo lectura, usuario sin privilegios y límites de CPU (5 s), memoria (256 MB), procesos y tamaño de salida. Solo la API puede llamarlo (no se publica ningún puerto).
+
+## Tests
 
 ```bash
-# Ejecutar todos los tests
-npm test
-
-# Ejecutar tests en modo watch
-npm run test:watch
-
-# Generar reporte de cobertura
-npm run test:coverage
+npm test   # tests de integración contra la API en marcha (localhost:4000)
 ```
-
-## 🚀 Despliegue
-
-### Desarrollo
-```bash
-npm run dev
-```
-
-### Producción
-```bash
-npm run build
-npm start
-```
-
-## 🤝 Contribución
-
-1. Fork el proyecto
-2. Crea una rama para tu feature (`git checkout -b feature/AmazingFeature`)
-3. Commit tus cambios (`git commit -m 'Add some AmazingFeature'`)
-4. Push a la rama (`git push origin feature/AmazingFeature`)
-5. Abre un Pull Request
-
-## 📝 Licencia
-
-Este proyecto está bajo la Licencia MIT - ver el archivo [LICENSE](LICENSE) para más detalles.
-
-## 👥 Equipo
-
-Desarrollado con ❤️ por el equipo de AstroCode
-
----
-
-<div align="center">
-  <strong>🛡️ ¡Potencia tu aplicación con AstroCode API! 🚀</strong>
-</div>

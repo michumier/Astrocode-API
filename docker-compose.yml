@@ -1,0 +1,109 @@
+# Las contraseñas y secretos se leen del archivo .env (copia .env.example a .env)
+
+services:
+  # Base de datos MySQL
+  mysql-db:
+    image: mysql:8.0
+    container_name: astrocode-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:?Define DB_PASSWORD en el .env}
+      MYSQL_DATABASE: ${DB_NAME:-astrocodebd}
+    ports:
+      - "127.0.0.1:3307:3306" # solo accesible desde tu PC (MySQL Workbench, etc.)
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./src/db:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+    networks:
+      - backend
+
+  # Contenedor aislado para ejecutar el código Python de los alumnos:
+  # sin internet, sin acceso a MySQL, solo lectura, sin privilegios y con límites
+  python-runner:
+    build:
+      context: ./python-runner
+      dockerfile: Dockerfile
+    container_name: astrocode-python-runner
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 128
+    restart: unless-stopped
+    networks:
+      - runner # sin "ports": no se publica al exterior, solo la API lo ve
+
+  # Backend GraphQL API
+  astrocode-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dev
+    container_name: astrocode-api
+    env_file: .env
+    ports:
+      - "127.0.0.1:4000:4000"
+    environment:
+      - NODE_ENV=development
+      - PORT=4000
+      - DB_HOST=mysql-db
+      - DB_PORT=3306
+      - DB_USER=root
+      - DB_NAME=${DB_NAME:-astrocodebd}
+      - PYTHON_RUNNER_URL=http://python-runner:5000
+      - CORS_ORIGIN=http://localhost:3000
+    depends_on:
+      mysql-db:
+        condition: service_healthy
+      python-runner:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - backend
+      - runner
+    # Código fuente montado: los cambios en src/ recargan la API sola
+    volumes:
+      - ./src:/app/src
+
+  # Frontend React
+  astrocode-web:
+    build:
+      context: ../Astrocode-web/client
+      dockerfile: Dockerfile
+    container_name: astrocode-web
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      - REACT_APP_API_URL=http://localhost:4000/graphql
+      - WDS_SOCKET_PORT=0
+      - WATCHPACK_POLLING=true # recarga en caliente con volúmenes de Windows
+    depends_on:
+      - astrocode-api
+    restart: unless-stopped
+    networks:
+      - backend
+    # Montar el código fuente para desarrollo
+    volumes:
+      - ../Astrocode-web/client/src:/app/src
+      - ../Astrocode-web/client/public:/app/public
+
+networks:
+  backend:
+    driver: bridge
+  # Red interna: sin salida a internet. Solo la API y el runner están en ella
+  runner:
+    driver: bridge
+    internal: true
+
+volumes:
+  mysql_data:
