@@ -47,11 +47,11 @@ export const nivelResolvers = {
     },
 
     // Obtener niveles por puntos
-    nivelesPorPuntos: async (_: any, { puntos }: { puntos: number }) => {
+    // El schema la define sin argumentos: todos los niveles ordenados por puntos
+    nivelesPorPuntos: async () => {
       try {
         const result = await query(
-          'SELECT id, nombre, puntos, descripcion FROM niveles WHERE puntos = ? ORDER BY nombre',
-          [puntos]
+          'SELECT id, nombre, puntos, descripcion FROM niveles ORDER BY puntos ASC'
         ) as any[];
         return result;
       } catch (error) {

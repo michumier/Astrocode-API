@@ -28,6 +28,18 @@ export const tareaTypeDefs = gql`
     tiempoFinalizacionId: ID
     codigoBase: String
     resultadoEsperado: String
+    # Solución de referencia (nunca se envía al alumno)
+    solucion: String
+    tests: [TestTareaInput!]
+  }
+
+  input TestTareaInput {
+    descripcion: String
+    # Código que se ejecuta después del del alumno (llamadas a su función + print)
+    codigoTest: String
+    entrada: String
+    salidaEsperada: String!
+    oculto: Boolean
   }
 
   input ActualizarTareaInput {
@@ -94,8 +106,24 @@ export const tareaTypeDefs = gql`
     eliminarTarea(id: ID!): Boolean!
   }
 
+  type ResultadoTest {
+    descripcion: String!
+    oculto: Boolean!
+    superado: Boolean!
+    esperado: String
+    obtenido: String
+    error: String
+  }
+
+  type ResultadoTests {
+    superados: Int!
+    total: Int!
+    resultados: [ResultadoTest!]!
+  }
+
   type ResultadoSolucion {
     correcto: Boolean!
+    tests: ResultadoTests
     yaCompletada: Boolean!
     puntos: Int!
     tiempo: String

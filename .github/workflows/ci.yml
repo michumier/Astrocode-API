@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  api:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Compilar TypeScript
+        run: npm run build
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Imagen de producción de la API
+        run: docker build --target prod -t astrocode-api .
+      - name: Imagen del python-runner
+        run: docker build -t astrocode-python-runner ./python-runner
+      - name: El runner aísla el código del alumno
+        run: |
+          docker run -d --name runner --read-only --tmpfs /tmp --cap-drop ALL -p 5000:5000 astrocode-python-runner
+          for i in $(seq 1 20); do curl -sf localhost:5000/health && break; sleep 1; done
+          curl -sf -X POST localhost:5000/run -H 'Content-Type: application/json' \
+            -d '{"code":"print(sum([1,2,3]))"}' | grep -qF '"stdout":"6'
+          curl -sf -X POST localhost:5000/run -H 'Content-Type: application/json' \
+            -d '{"code":"while True: pass"}' | grep -q '"exit_code":124'

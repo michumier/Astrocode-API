@@ -1,4 +1,6 @@
+import { PoolConnection } from 'mysql2/promise';
 import { pool } from '../config/db';
+import { testsRetosDiarios } from './seeds/retosDiarios';
 
 /*
  * Migraciones de la base de datos.
@@ -8,7 +10,13 @@ import { pool } from '../config/db';
  * se añade aquí una migración nueva AL FINAL de la lista (nunca editar una ya aplicada).
  * Al arrancar, la API aplica las que falten y las apunta en `schema_migrations`.
  */
-const migraciones: { id: string; sql: string }[] = [
+interface Migracion {
+  id: string;
+  sql?: string;
+  run?: (conn: PoolConnection) => Promise<void>;
+}
+
+const migraciones: Migracion[] = [
   {
     id: '001_rol_usuarios',
     sql: "ALTER TABLE usuarios ADD COLUMN rol VARCHAR(20) NOT NULL DEFAULT 'alumno'",
@@ -17,6 +25,69 @@ const migraciones: { id: string; sql: string }[] = [
     // Los resolvers de categorías ya usaban esta columna, pero no existía en la BD
     id: '002_descripcion_categorias',
     sql: 'ALTER TABLE categorias ADD COLUMN descripcion TEXT NULL',
+  },
+  {
+    // Tests que se ejecutan contra el código del alumno. Los ocultos no se le enseñan.
+    id: '003_tests_tarea',
+    sql: `CREATE TABLE tests_tarea (
+      id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      tarea_id BIGINT NOT NULL,
+      descripcion VARCHAR(255) NOT NULL DEFAULT '',
+      codigo_test TEXT NULL COMMENT 'Código que se añade tras el del alumno (llamadas + print)',
+      entrada TEXT NULL COMMENT 'stdin para el programa',
+      salida_esperada TEXT NOT NULL,
+      oculto TINYINT(1) NOT NULL DEFAULT 0,
+      orden INT NOT NULL DEFAULT 0,
+      KEY tarea_id (tarea_id),
+      CONSTRAINT tests_tarea_ibfk_1 FOREIGN KEY (tarea_id) REFERENCES tareas (id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`,
+  },
+  {
+    // Solución de referencia: solo la ve el servidor (y la IA para dar pistas), nunca el alumno
+    id: '004_solucion_tareas',
+    sql: 'ALTER TABLE tareas ADD COLUMN solucion TEXT NULL',
+  },
+  {
+    // En los retos diarios, "resultado_esperado" contenía la SOLUCIÓN (se le mostraba al alumno
+    // y además no se podía resolver comparando salidas). Se mueve a `solucion`, se pone un
+    // ejemplo en su lugar y se añaden tests (algunos ocultos).
+    id: '005_tests_retos_diarios',
+    run: async (conn) => {
+      for (const reto of testsRetosDiarios) {
+        const [tareas] = await conn.query('SELECT id FROM tareas WHERE titulo = ?', [reto.titulo]) as any[];
+        for (const { id } of tareas as any[]) {
+          await conn.query(
+            'UPDATE tareas SET solucion = resultado_esperado, resultado_esperado = ? WHERE id = ?',
+            [reto.ejemplo, id]
+          );
+          for (const [orden, test] of reto.tests.entries()) {
+            await conn.query(
+              `INSERT INTO tests_tarea (tarea_id, descripcion, codigo_test, salida_esperada, oculto, orden)
+               VALUES (?, ?, ?, ?, ?, ?)`,
+              [id, test.descripcion, test.codigo, test.salida, test.oculto ? 1 : 0, orden]
+            );
+          }
+        }
+      }
+    },
+  },
+  {
+    // Registro de pistas pedidas a la IA (para limitar cuántas pide cada alumno)
+    id: '006_pistas_ia',
+    sql: `CREATE TABLE pistas_ia (
+      id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      usuario_id BIGINT NOT NULL,
+      tarea_id BIGINT NOT NULL,
+      creado_el TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+      KEY usuario_fecha (usuario_id, creado_el),
+      CONSTRAINT pistas_ia_ibfk_1 FOREIGN KEY (usuario_id) REFERENCES usuarios (id) ON DELETE CASCADE,
+      CONSTRAINT pistas_ia_ibfk_2 FOREIGN KEY (tarea_id) REFERENCES tareas (id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`,
+  },
+  {
+    // Igual que en categorías: los resolvers de niveles pedían esta columna y la query fallaba siempre
+    id: '007_descripcion_niveles',
+    sql: 'ALTER TABLE niveles ADD COLUMN descripcion TEXT NULL',
   },
 ];
 
@@ -34,17 +105,26 @@ export async function aplicarMigraciones() {
   for (const migracion of migraciones) {
     if (aplicadas.has(migracion.id)) continue;
     console.log(`Aplicando migración ${migracion.id}...`);
-    await pool.query(migracion.sql);
-    await pool.query('INSERT INTO schema_migrations (id) VALUES (?)', [migracion.id]);
+    const conn = await pool.getConnection();
+    try {
+      if (migracion.sql) await conn.query(migracion.sql);
+      if (migracion.run) await migracion.run(conn);
+      await conn.query('INSERT INTO schema_migrations (id) VALUES (?)', [migracion.id]);
+    } finally {
+      conn.release();
+    }
   }
 }
 
 // Da rol admin a los emails de ADMIN_EMAILS (separados por comas) en el .env
-export async function sincronizarAdmins() {
-  const emails = (process.env.ADMIN_EMAILS || '')
+export const emailsAdmin = () =>
+  (process.env.ADMIN_EMAILS || '')
     .split(',')
     .map((e) => e.trim())
     .filter(Boolean);
+
+export async function sincronizarAdmins() {
+  const emails = emailsAdmin();
   if (emails.length === 0) return;
 
   await pool.query(

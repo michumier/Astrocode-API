@@ -1,5 +1,5 @@
 import { query, transaction } from '../../config/db';
-import { ejecutarPython, normalizarSalida } from '../../services/pythonRunner';
+import { corregirTarea } from '../../services/correccion';
 import { GraphQLError } from 'graphql';
 import { UserInputError, Context, requireAuth, requireAdmin } from '../errors';
 
@@ -14,7 +14,26 @@ interface CrearTareaInput {
   tiempoFinalizacionId?: string;
   codigoBase?: string;
   resultadoEsperado?: string;
+  solucion?: string;
+  tests?: TestTareaInput[];
 }
+
+interface TestTareaInput {
+  descripcion?: string;
+  codigoTest?: string;
+  entrada?: string;
+  salidaEsperada: string;
+  oculto?: boolean;
+}
+
+// Convierte una fila de MySQL (snake_case) al tipo Tarea de GraphQL (camelCase)
+const mapTarea = (tarea: any) => ({
+  ...tarea,
+  puntosBase: tarea.puntos_base,
+  puntosBonus: tarea.puntos_bonus,
+  codigoBase: tarea.codigo_base,
+  resultadoEsperado: tarea.resultado_esperado,
+});
 
 interface ActualizarTareaInput {
   categoriaId?: string;
@@ -456,13 +475,28 @@ export const tareaResolvers = {
           }
         }
 
-        // Crear la nueva tarea
-        const result = await query(
-          `INSERT INTO tareas (categoria_id, nivel_id, titulo, descripcion, fecha_vencimiento, 
-                              prioridad, puntos_base, tiempo_finalizacion_id, codigo_base, resultado_esperado) 
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [categoriaId, nivelId, input.titulo || '', descripcion, fechaVencimiento, prioridad, puntosBase, tiempoFinalizacionId, input.codigoBase || '', input.resultadoEsperado || '']
-        ) as any;
+        // Crear la nueva tarea y sus tests en una transacción
+        // (mysql2 no acepta undefined como parámetro: los campos opcionales van a null)
+        const insertId = await transaction(async (conn) => {
+          const [result] = await conn.execute(
+            `INSERT INTO tareas (categoria_id, nivel_id, titulo, descripcion, fecha_vencimiento,
+                                prioridad, puntos_base, tiempo_finalizacion_id, codigo_base, resultado_esperado, solucion)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [categoriaId, nivelId, input.titulo || '', descripcion, fechaVencimiento ?? null, prioridad ?? null,
+             puntosBase ?? null, tiempoFinalizacionId ?? null, input.codigoBase || '', input.resultadoEsperado || '',
+             input.solucion ?? null]
+          ) as any;
+
+          for (const [orden, test] of (input.tests || []).entries()) {
+            await conn.execute(
+              `INSERT INTO tests_tarea (tarea_id, descripcion, codigo_test, entrada, salida_esperada, oculto, orden)
+               VALUES (?, ?, ?, ?, ?, ?, ?)`,
+              [result.insertId, test.descripcion || '', test.codigoTest ?? null, test.entrada ?? null,
+               test.salidaEsperada, test.oculto ? 1 : 0, orden]
+            );
+          }
+          return result.insertId;
+        });
 
         // Obtener la tarea creada
         const newTarea = await query(
@@ -470,10 +504,10 @@ export const tareaResolvers = {
                   prioridad, completado, tiempo_finalizacion_id, puntos_base, puntos_bonus,
                   codigo_base, resultado_esperado
            FROM tareas WHERE id = ?`,
-          [result.insertId]
+          [insertId]
         ) as any[];
 
-        return newTarea[0];
+        return mapTarea(newTarea[0]);
       } catch (error) {
         if (error instanceof GraphQLError) {
           throw error;
@@ -711,23 +745,23 @@ export const tareaResolvers = {
       }
 
       const tarea = tareaInfo[0];
-      const ejecucion = await ejecutarPython(codigo);
-      const correcto =
-        ejecucion.status.id === 3 &&
-        !!tarea.resultado_esperado &&
-        normalizarSalida(ejecucion.stdout) === normalizarSalida(tarea.resultado_esperado);
+      const { correcto, ejecucion, tests } = await corregirTarea(tarea, codigo);
+
+      let mensajeFallo = 'Tu código ha dado un error. Revisa la salida de errores.';
+      if (tests && ejecucion.status.id === 3) {
+        mensajeFallo = `Has superado ${tests.superados} de ${tests.total} tests. ¡Revisa los que fallan!`;
+      } else if (ejecucion.status.id === 3) {
+        mensajeFallo = 'La salida no coincide con el resultado esperado. ¡Revisa tu código!';
+      }
 
       const respuesta = {
         correcto,
         ejecucion,
+        tests,
         yaCompletada: false,
         puntos: 0,
         tiempo: null as string | null,
-        mensaje: correcto
-          ? ''
-          : ejecucion.status.id === 3
-            ? 'La salida no coincide con el resultado esperado. ¡Revisa tu código!'
-            : 'Tu código ha dado un error. Revisa la salida de errores.',
+        mensaje: correcto ? '' : mensajeFallo,
       };
 
       if (!correcto) {

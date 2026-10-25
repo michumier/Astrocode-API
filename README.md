@@ -32,7 +32,21 @@ Los usuarios son `alumno` por defecto. Los emails que pongas en `ADMIN_EMAILS` r
 
 ## Corrección de ejercicios
 
-`enviarSolucion(tareaId, codigo, tiempoCompletado)` ejecuta el código en el `python-runner`, compara la salida con el resultado esperado **en el servidor** y solo entonces suma los puntos (en una transacción). `executeCode` sirve para probar código sin corregir.
+`enviarSolucion(tareaId, codigo, tiempoCompletado)` corrige **en el servidor** y solo entonces suma los puntos (en una transacción):
+
+- Si la tarea tiene **tests** (tabla `tests_tarea`), ejecuta el código del alumno seguido de cada test. Los tests ocultos no muestran sus datos, así que no vale con imprimir el resultado esperado.
+- Si no tiene tests, compara la salida del programa con `resultado_esperado`.
+
+`executeCode` sirve para probar código sin corregir. La solución de referencia de cada tarea (`solucion`) nunca se envía al cliente.
+
+## IA (opcional, NVIDIA)
+
+Con `NVIDIA_API_KEY` en el `.env` (clave gratuita en [build.nvidia.com](https://build.nvidia.com)) se activan:
+
+- **Pistas para alumnos** (`pedirPista`): 3 niveles, de conceptual a muy concreta, con un límite diario por alumno (`PISTAS_POR_DIA`). La IA recibe la solución de referencia para entender el ejercicio, pero tiene prohibido revelarla, y además un filtro bloquea cualquier respuesta que copie líneas de la solución.
+- **Generador de ejercicios para admins** (`generarEjercicio`, y en la web: Perfil → Panel de admin): la IA propone enunciado, código base, solución y tests. Cada test se **comprueba en el sandbox** con la solución y se descartan los incorrectos. No se guarda nada hasta que el admin lo revisa.
+
+La IA nunca decide los puntos: corregir con tests es determinista y no se puede engañar con instrucciones en el código. El modelo se cambia con `NVIDIA_MODEL`, y sirve cualquier API compatible con OpenAI cambiando `NVIDIA_BASE_URL`. Sin clave, todo lo demás funciona igual.
 
 ## Python runner
 

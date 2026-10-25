@@ -4,6 +4,7 @@ import { query } from '../../config/db';
 import { GraphQLError } from 'graphql';
 import { UserInputError, ForbiddenError, AuthenticationError, Context, requireAuth, requireAdmin, mismoId } from '../errors';
 import { transaction } from '../../config/db';
+import { emailsAdmin } from '../../db/migrations';
 
 interface Usuario {
   id: string;
@@ -57,6 +58,22 @@ const verifyToken = (token: string): any => {
   } catch {
     throw new AuthenticationError('Token inválido o caducado');
   }
+};
+
+const validarContrasena = (contrasena: string) => {
+  if (contrasena.length < 8 || contrasena.length > 128) {
+    throw new UserInputError('La contraseña debe tener entre 8 y 128 caracteres');
+  }
+};
+
+const validarRegistro = (input: CrearUsuarioInput) => {
+  if (!/^[\w.-]{3,30}$/.test(input.nombre_usuario)) {
+    throw new UserInputError('El nombre de usuario debe tener entre 3 y 30 caracteres (letras, números, punto, guion o guion bajo)');
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.correo_electronico) || input.correo_electronico.length > 255) {
+    throw new UserInputError('El correo electrónico no es válido');
+  }
+  validarContrasena(input.contrasena);
 };
 
 // Función helper para formatear fechas de usuario
@@ -192,6 +209,7 @@ export const userResolvers = {
   Mutation: {
     // Crear un nuevo usuario
     crearUsuario: async (_: any, { input }: { input: CrearUsuarioInput }): Promise<Usuario> => {
+      validarRegistro(input);
       try {
         // Verificar si el usuario ya existe
         const usuarioExistente = await query(
@@ -208,9 +226,10 @@ export const userResolvers = {
 
         // Insertar nuevo usuario
         const resultado = await query(
-          `INSERT INTO usuarios (nombre_usuario, correo_electronico, contrasena_hash, nombre_completo, puntos) 
-           VALUES (?, ?, ?, ?, 0)`,
-          [input.nombre_usuario, input.correo_electronico, contrasenaHash, input.nombre_completo || null]
+          `INSERT INTO usuarios (nombre_usuario, correo_electronico, contrasena_hash, nombre_completo, puntos, rol)
+           VALUES (?, ?, ?, ?, 0, ?)`,
+          [input.nombre_usuario, input.correo_electronico, contrasenaHash, input.nombre_completo || null,
+           emailsAdmin().includes(input.correo_electronico) ? 'admin' : 'alumno']
         ) as any;
 
         // Obtener el usuario creado
@@ -428,6 +447,8 @@ export const userResolvers = {
         if (!contrasenaValida) {
           throw new AuthenticationError('Contraseña actual incorrecta');
         }
+
+        validarContrasena(nuevaContrasena);
 
         // Hash de la nueva contraseña
         const nuevoHash = await bcrypt.hash(nuevaContrasena, 12);
