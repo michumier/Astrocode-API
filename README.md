@@ -1,4 +1,4 @@
-# AstroCode API
+# 🛡️ AstroCode API
 
 Backend GraphQL de AstroCode: Node.js + TypeScript + Apollo Server + MySQL, con un contenedor aislado (`python-runner`) que ejecuta el código Python de los alumnos.
 
