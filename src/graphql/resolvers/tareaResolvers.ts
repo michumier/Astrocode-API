@@ -1,5 +1,6 @@
 import { query, transaction } from '../../config/db';
 import { corregirTarea } from '../../services/correccion';
+import { clasificarError } from '../../services/errores';
 import { GraphQLError } from 'graphql';
 import { UserInputError, Context, requireAuth, requireAdmin } from '../errors';
 
@@ -69,6 +70,9 @@ const indiceRetoDelDia = async (): Promise<number> => {
 
 export const tareaResolvers = {
   Tarea: {
+    // Las tareas antiguas o construidas a mano pueden no traer el tipo
+    tipo: (parent: any) => parent.tipo || 'codigo',
+
     // Resolver para obtener la categoría de una tarea
     categoria: async (parent: any) => {
       try {
@@ -106,7 +110,7 @@ export const tareaResolvers = {
           SELECT t.id, t.categoria_id, t.nivel_id, t.titulo, t.descripcion, 
                  t.fecha_vencimiento, t.prioridad, t.completado, 
                  t.tiempo_finalizacion_id, t.puntos_base, t.puntos_bonus,
-                 t.codigo_base, t.resultado_esperado
+                 t.codigo_base, t.resultado_esperado, t.tipo
           FROM tareas t
         `;
         const condiciones: string[] = [];
@@ -160,7 +164,7 @@ export const tareaResolvers = {
         const result = await query(
           `SELECT id, categoria_id, nivel_id, titulo, descripcion, fecha_vencimiento, 
                   prioridad, completado, tiempo_finalizacion_id, puntos_base, puntos_bonus,
-                  codigo_base, resultado_esperado
+                  codigo_base, resultado_esperado, tipo
            FROM tareas WHERE id = ?`,
           [id]
         ) as any[];
@@ -192,7 +196,7 @@ export const tareaResolvers = {
         const result = await query(
           `SELECT id, categoria_id, nivel_id, titulo, descripcion, fecha_vencimiento, 
                   prioridad, completado, tiempo_finalizacion_id, puntos_base, puntos_bonus,
-                  codigo_base, resultado_esperado
+                  codigo_base, resultado_esperado, tipo
            FROM tareas WHERE categoria_id = ? 
            ORDER BY prioridad DESC, fecha_vencimiento ASC`,
           [categoriaId]
@@ -219,7 +223,7 @@ export const tareaResolvers = {
         const result = await query(
           `SELECT id, categoria_id, nivel_id, titulo, descripcion, fecha_vencimiento, 
                   prioridad, completado, tiempo_finalizacion_id, puntos_base, puntos_bonus,
-                  codigo_base, resultado_esperado
+                  codigo_base, resultado_esperado, tipo
            FROM tareas WHERE nivel_id = ? 
            ORDER BY prioridad DESC, fecha_vencimiento ASC`,
           [nivelId]
@@ -272,7 +276,7 @@ export const tareaResolvers = {
         const result = await query(
           `SELECT id, categoria_id, nivel_id, titulo, descripcion, fecha_vencimiento, 
                   prioridad, completado, tiempo_finalizacion_id, puntos_base, puntos_bonus,
-                  codigo_base, resultado_esperado
+                  codigo_base, resultado_esperado, tipo
            FROM tareas WHERE prioridad = ? 
            ORDER BY fecha_vencimiento ASC`,
           [prioridad]
@@ -299,7 +303,7 @@ export const tareaResolvers = {
         const result = await query(
           `SELECT t.id, t.categoria_id, t.nivel_id, t.titulo, t.descripcion, t.fecha_vencimiento, 
                   t.prioridad, t.completado, t.tiempo_finalizacion_id, t.puntos_base, t.puntos_bonus,
-                  t.codigo_base, t.resultado_esperado, n.nombre as nivel_nombre
+                  t.codigo_base, t.resultado_esperado, t.tipo, n.nombre as nivel_nombre
            FROM tareas t 
            JOIN tareas_usuarios tu ON t.id = tu.tarea_id
            JOIN niveles n ON t.nivel_id = n.id
@@ -329,7 +333,7 @@ export const tareaResolvers = {
         const result = await query(
           `SELECT id, categoria_id, nivel_id, titulo, descripcion, fecha_vencimiento, 
                   prioridad, completado, tiempo_finalizacion_id, puntos_base, puntos_bonus,
-                  codigo_base, resultado_esperado
+                  codigo_base, resultado_esperado, tipo
            FROM tareas WHERE completado = false 
            ORDER BY prioridad DESC, fecha_vencimiento ASC`
         ) as any[];
@@ -346,13 +350,34 @@ export const tareaResolvers = {
       }
     },
 
+    misIntentos: async (_: any, { tareaId, limite = 20 }: { tareaId: string; limite?: number }, context: Context) => {
+      const usuario = requireAuth(context);
+      const limiteSeguro = Math.min(Math.max(Math.floor(limite), 1), 100);
+      const filas = await query(
+        `SELECT id, codigo, correcto, tests_superados, tests_totales, tipo_error, segundos_en_tarea, creado_el
+         FROM intentos WHERE usuario_id = ? AND tarea_id = ?
+         ORDER BY creado_el DESC, id DESC LIMIT ${limiteSeguro}`,
+        [usuario.id, tareaId]
+      ) as any[];
+      return filas.map((f) => ({
+        id: f.id,
+        codigo: f.codigo,
+        correcto: !!f.correcto,
+        testsSuperados: f.tests_superados,
+        testsTotales: f.tests_totales,
+        tipoError: f.tipo_error,
+        segundosEnTarea: f.segundos_en_tarea,
+        creadoEl: new Date(f.creado_el).toISOString(),
+      }));
+    },
+
     dailyChallenge: async (_: any, __: any, context: Context) => {
       requireAuth(context, 'Debes estar autenticado para ver el reto diario');
 
       try {
         const campos = `t.id, t.categoria_id, t.nivel_id, t.titulo, t.descripcion, t.fecha_vencimiento,
                   t.prioridad, t.completado, t.tiempo_finalizacion_id, t.puntos_base, t.puntos_bonus,
-                  t.codigo_base, t.resultado_esperado`;
+                  t.codigo_base, t.resultado_esperado, t.tipo`;
 
         // 1º: un reto programado para hoy
         let result = await query(
@@ -502,7 +527,7 @@ export const tareaResolvers = {
         const newTarea = await query(
           `SELECT id, categoria_id, nivel_id, titulo, descripcion, fecha_vencimiento, 
                   prioridad, completado, tiempo_finalizacion_id, puntos_base, puntos_bonus,
-                  codigo_base, resultado_esperado
+                  codigo_base, resultado_esperado, tipo
            FROM tareas WHERE id = ?`,
           [insertId]
         ) as any[];
@@ -664,7 +689,7 @@ export const tareaResolvers = {
         const updatedTarea = await query(
           `SELECT id, categoria_id, nivel_id, titulo, descripcion, fecha_vencimiento, 
                   prioridad, completado, tiempo_finalizacion_id, puntos_base, puntos_bonus,
-                  codigo_base, resultado_esperado
+                  codigo_base, resultado_esperado, tipo
            FROM tareas WHERE id = ?`,
           [id]
         ) as any[];
@@ -746,6 +771,18 @@ export const tareaResolvers = {
 
       const tarea = tareaInfo[0];
       const { correcto, ejecucion, tests } = await corregirTarea(tarea, codigo);
+
+      // Registrar el intento (si falla el registro, la corrección no se ve afectada)
+      try {
+        await query(
+          `INSERT INTO intentos (usuario_id, tarea_id, codigo, correcto, tests_superados, tests_totales, tipo_error, segundos_en_tarea)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [usuario.id, tarea.id, codigo, correcto ? 1 : 0, tests?.superados ?? null, tests?.total ?? null,
+           clasificarError(ejecucion, correcto, !!tests), Math.max(0, Math.floor(tiempoCompletado || 0))]
+        );
+      } catch (error) {
+        console.error('No se pudo registrar el intento:', error);
+      }
 
       let mensajeFallo = 'Tu código ha dado un error. Revisa la salida de errores.';
       if (tests && ejecucion.status.id === 3) {

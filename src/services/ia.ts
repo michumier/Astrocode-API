@@ -6,7 +6,10 @@ import axios from 'axios';
  * Si no hay NVIDIA_API_KEY, las funciones de IA quedan desactivadas y el resto de la app funciona igual.
  */
 const BASE_URL = process.env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1';
-const MODELO = process.env.NVIDIA_MODEL || 'meta/llama-3.3-70b-instruct';
+const MODELO = process.env.NVIDIA_MODEL || 'nvidia/nemotron-3-ultra-550b-a55b';
+// Los modelos Nemotron "piensan" antes de responder: sin esto tardan más y pueden gastar
+// todos los tokens razonando y devolver la respuesta vacía
+const SIN_RAZONAMIENTO = process.env.NVIDIA_RAZONAMIENTO !== 'true';
 
 export const iaDisponible = () => !!process.env.NVIDIA_API_KEY;
 
@@ -28,13 +31,18 @@ export async function chat(mensajes: Mensaje[], opciones: { temperatura?: number
         messages: mensajes,
         temperature: opciones.temperatura ?? 0.4,
         max_tokens: opciones.maxTokens ?? 600,
+        ...(SIN_RAZONAMIENTO ? { chat_template_kwargs: { enable_thinking: false } } : {}),
       },
       {
         headers: { Authorization: `Bearer ${process.env.NVIDIA_API_KEY}`, 'Content-Type': 'application/json' },
         timeout: 60000,
       }
     );
-    return (data?.choices?.[0]?.message?.content || '').trim();
+    const contenido = (data?.choices?.[0]?.message?.content || '').trim();
+    if (!contenido) {
+      throw new Error('Respuesta vacía del modelo');
+    }
+    return contenido;
   } catch (error: any) {
     // Nunca registrar la cabecera Authorization
     console.error('Error llamando a la IA:', error.response?.status, error.response?.data?.detail || error.message);
@@ -55,7 +63,7 @@ export function extraerJson(texto: string): any {
 // ---------- Pistas para alumnos ----------
 
 const NIVELES_PISTA: Record<number, string> = {
-  1: 'Da una pista CONCEPTUAL: qué idea o herramienta de Python necesita, sin señalar líneas concretas.',
+  1: 'Da una pista CONCEPTUAL y BREVE (1-2 frases): nombra solo la idea o herramienta de Python que le falta, o hazle una pregunta que le haga pensar. NO describas los pasos del algoritmo ni señales líneas concretas.',
   2: 'Da una pista MÁS CONCRETA: indica qué parte de su código está mal o qué falta, sin escribir el código.',
   3: 'Da una pista MUY CONCRETA: señala la línea o la expresión exacta a cambiar y por qué, con como mucho una línea de código de ejemplo que NO sea la solución completa.',
 };
@@ -71,6 +79,7 @@ export async function generarPista(datos: {
 }): Promise<string> {
   const sistema = `Eres "AstroTutor", el tutor de AstroCode, una plataforma con temática espacial para aprender Python desde cero.
 Tu alumno es principiante. Responde SIEMPRE en español, con un tono cercano y motivador, en 2-4 frases.
+Puedes usar **negrita** y \`código\` para nombres de variables o funciones, pero no bloques de código.
 Reglas estrictas:
 - NUNCA des la solución completa ni reescribas su programa corregido.
 - ${NIVELES_PISTA[datos.nivel] || NIVELES_PISTA[1]}

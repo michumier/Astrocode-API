@@ -7,7 +7,7 @@ import dotenv from 'dotenv';
 import { typeDefs } from '../../schema';
 import { resolvers, getUsuarioFromToken } from '../resolvers/resolvers';
 import { waitForDatabase } from '../../config/db';
-import { aplicarMigraciones, sincronizarAdmins } from '../../db/migrations';
+import { aplicarMigraciones, sincronizarAdmins, limpiarIntentosAntiguos } from '../../db/migrations';
 
 // Load environment variables
 dotenv.config();
@@ -82,6 +82,7 @@ export async function startServer() {
   await waitForDatabase();
   await aplicarMigraciones();
   await sincronizarAdmins();
+  await limpiarIntentosAntiguos();
   console.log('Database connected successfully');
 
   app.listen(port, () => {
