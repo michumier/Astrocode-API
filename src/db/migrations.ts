@@ -114,6 +114,36 @@ const migraciones: Migracion[] = [
     id: '009_tipo_config_tareas',
     sql: "ALTER TABLE tareas ADD COLUMN tipo VARCHAR(20) NOT NULL DEFAULT 'codigo', ADD COLUMN config JSON NULL",
   },
+  {
+    // Fase 1: sabotajes generados (y verificados) a partir de la solución de una tarea
+    id: '010_sabotajes',
+    sql: `CREATE TABLE sabotajes (
+      id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      tarea_original_id BIGINT NOT NULL,
+      tarea_id BIGINT NULL COMMENT 'Tarea tipo sabotaje creada al publicarlo',
+      codigo MEDIUMTEXT NOT NULL,
+      hash CHAR(64) NOT NULL,
+      operador VARCHAR(30) NOT NULL,
+      descripcion VARCHAR(255) NOT NULL,
+      linea INT NULL,
+      lineas_cambiadas INT NOT NULL,
+      diff TEXT NOT NULL,
+      contexto TEXT NULL,
+      dificultad VARCHAR(10) NOT NULL,
+      tests_fallidos INT NOT NULL,
+      tests_totales INT NOT NULL,
+      origen VARCHAR(10) NOT NULL DEFAULT 'ast',
+      creado_el TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE KEY original_hash (tarea_original_id, hash),
+      CONSTRAINT sabotajes_ibfk_1 FOREIGN KEY (tarea_original_id) REFERENCES tareas (id) ON DELETE CASCADE,
+      CONSTRAINT sabotajes_ibfk_2 FOREIGN KEY (tarea_id) REFERENCES tareas (id) ON DELETE SET NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`,
+  },
+  {
+    id: '011_insignia_cirujano',
+    sql: `INSERT IGNORE INTO insignias (nombre, descripcion, url_imagen)
+          VALUES ('Cirujano', 'Arregló un sabotaje cambiando el mínimo de líneas posible.', 'https://img.icons8.com/color/96/scalpel.png')`,
+  },
 ];
 
 // Días que se guardan los intentos (privacidad). Se limpian al arrancar la API.

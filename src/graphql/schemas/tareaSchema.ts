@@ -5,6 +5,8 @@ export const tareaTypeDefs = gql`
     id: ID!
     # codigo | sabotaje | pilotaje
     tipo: String!
+    # Ambientación de los sabotajes (null en el resto)
+    contexto: String
     categoria: Categoria!
     nivel: Nivel!
     titulo: String!
@@ -138,8 +140,18 @@ export const tareaTypeDefs = gql`
     resultados: [ResultadoTest!]!
   }
 
+  type RevelacionSabotaje {
+    operador: String!
+    descripcion: String!
+    linea: Int
+    diff: String!
+  }
+
   type ResultadoSolucion {
     correcto: Boolean!
+    # Solo en sabotajes resueltos: qué había cambiado el saboteador
+    revelacion: RevelacionSabotaje
+    insigniasNuevas: [String!]!
     tests: ResultadoTests
     yaCompletada: Boolean!
     puntos: Int!

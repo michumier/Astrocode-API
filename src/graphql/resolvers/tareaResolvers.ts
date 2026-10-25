@@ -2,7 +2,8 @@ import { query, transaction } from '../../config/db';
 import { corregirTarea } from '../../services/correccion';
 import { clasificarError } from '../../services/errores';
 import { GraphQLError } from 'graphql';
-import { UserInputError, Context, requireAuth, requireAdmin } from '../errors';
+import { UserInputError, ForbiddenError, Context, requireAuth, requireAdmin } from '../errors';
+import { puedeAbrirTarea, sabotajePorTarea, esArregloQuirurgico } from '../../services/sabotajes';
 
 interface CrearTareaInput {
   categoriaId: string;
@@ -60,7 +61,7 @@ interface FiltroTareasInput {
 // Índice del reto de hoy dentro de la lista de retos diarios
 const indiceRetoDelDia = async (): Promise<number> => {
   const filas = await query(
-    `SELECT COUNT(*) AS total FROM tareas t JOIN categorias c ON t.categoria_id = c.id WHERE c.nombre = 'Reto Diario'`
+    `SELECT COUNT(*) AS total FROM tareas t JOIN categorias c ON t.categoria_id = c.id WHERE c.nombre = 'Reto Diario' AND t.tipo <> 'sabotaje'`
   ) as any[];
   const total = Number(filas[0]?.total || 0);
   if (total === 0) return 0;
@@ -72,6 +73,12 @@ export const tareaResolvers = {
   Tarea: {
     // Las tareas antiguas o construidas a mano pueden no traer el tipo
     tipo: (parent: any) => parent.tipo || 'codigo',
+    // Ambientación de los sabotajes (guardada en config)
+    contexto: (parent: any) => {
+      if (!parent.config) return null;
+      const config = typeof parent.config === 'string' ? JSON.parse(parent.config) : parent.config;
+      return config?.contexto || null;
+    },
 
     // Resolver para obtener la categoría de una tarea
     categoria: async (parent: any) => {
@@ -113,7 +120,8 @@ export const tareaResolvers = {
                  t.codigo_base, t.resultado_esperado, t.tipo
           FROM tareas t
         `;
-        const condiciones: string[] = [];
+        // Los sabotajes solo se ven en la sala de máquinas (se desbloquean aparte)
+        const condiciones: string[] = ["t.tipo <> 'sabotaje'"];
         const parametros: any[] = [];
 
         if (filtro) {
@@ -159,12 +167,12 @@ export const tareaResolvers = {
     },
 
     // Obtener una tarea por ID
-    tarea: async (_: any, { id }: { id: string }) => {
+    tarea: async (_: any, { id }: { id: string }, context: Context) => {
       try {
         const result = await query(
           `SELECT id, categoria_id, nivel_id, titulo, descripcion, fecha_vencimiento, 
                   prioridad, completado, tiempo_finalizacion_id, puntos_base, puntos_bonus,
-                  codigo_base, resultado_esperado, tipo
+                  codigo_base, resultado_esperado, tipo, config
            FROM tareas WHERE id = ?`,
           [id]
         ) as any[];
@@ -174,6 +182,9 @@ export const tareaResolvers = {
         }
         
         const tarea = result[0];
+        if (!(await puedeAbrirTarea(context.user, tarea))) {
+          throw new ForbiddenError('Completa primero el ejercicio original para desbloquear este sabotaje');
+        }
          return {
            ...tarea,
            puntosBase: tarea.puntos_base,
@@ -197,7 +208,7 @@ export const tareaResolvers = {
           `SELECT id, categoria_id, nivel_id, titulo, descripcion, fecha_vencimiento, 
                   prioridad, completado, tiempo_finalizacion_id, puntos_base, puntos_bonus,
                   codigo_base, resultado_esperado, tipo
-           FROM tareas WHERE categoria_id = ? 
+           FROM tareas WHERE categoria_id = ? AND tipo <> 'sabotaje' 
            ORDER BY prioridad DESC, fecha_vencimiento ASC`,
           [categoriaId]
         ) as any[];
@@ -224,7 +235,7 @@ export const tareaResolvers = {
           `SELECT id, categoria_id, nivel_id, titulo, descripcion, fecha_vencimiento, 
                   prioridad, completado, tiempo_finalizacion_id, puntos_base, puntos_bonus,
                   codigo_base, resultado_esperado, tipo
-           FROM tareas WHERE nivel_id = ? 
+           FROM tareas WHERE nivel_id = ? AND tipo <> 'sabotaje' 
            ORDER BY prioridad DESC, fecha_vencimiento ASC`,
           [nivelId]
         ) as any[];
@@ -277,7 +288,7 @@ export const tareaResolvers = {
           `SELECT id, categoria_id, nivel_id, titulo, descripcion, fecha_vencimiento, 
                   prioridad, completado, tiempo_finalizacion_id, puntos_base, puntos_bonus,
                   codigo_base, resultado_esperado, tipo
-           FROM tareas WHERE prioridad = ? 
+           FROM tareas WHERE prioridad = ? AND tipo <> 'sabotaje' 
            ORDER BY fecha_vencimiento ASC`,
           [prioridad]
         ) as any[];
@@ -334,7 +345,7 @@ export const tareaResolvers = {
           `SELECT id, categoria_id, nivel_id, titulo, descripcion, fecha_vencimiento, 
                   prioridad, completado, tiempo_finalizacion_id, puntos_base, puntos_bonus,
                   codigo_base, resultado_esperado, tipo
-           FROM tareas WHERE completado = false 
+           FROM tareas WHERE completado = false AND tipo <> 'sabotaje' 
            ORDER BY prioridad DESC, fecha_vencimiento ASC`
         ) as any[];
         return result.map(tarea => ({
@@ -382,7 +393,7 @@ export const tareaResolvers = {
         // 1º: un reto programado para hoy
         let result = await query(
           `SELECT ${campos} FROM tareas t JOIN categorias c ON t.categoria_id = c.id
-           WHERE c.nombre = 'Reto Diario' AND t.fecha_vencimiento = UTC_DATE()
+           WHERE c.nombre = 'Reto Diario' AND t.tipo <> 'sabotaje' AND t.fecha_vencimiento = UTC_DATE()
            ORDER BY t.id LIMIT 1`
         ) as any[];
 
@@ -391,7 +402,7 @@ export const tareaResolvers = {
         if (result.length === 0) {
           result = await query(
             `SELECT ${campos} FROM tareas t JOIN categorias c ON t.categoria_id = c.id
-             WHERE c.nombre = 'Reto Diario'
+             WHERE c.nombre = 'Reto Diario' AND t.tipo <> 'sabotaje'
              ORDER BY t.id
              LIMIT 1 OFFSET ?`,
             [String(await indiceRetoDelDia())]
@@ -770,6 +781,9 @@ export const tareaResolvers = {
       }
 
       const tarea = tareaInfo[0];
+      if (!(await puedeAbrirTarea(usuario, tarea))) {
+        throw new ForbiddenError('Completa primero el ejercicio original para desbloquear este sabotaje');
+      }
       const { correcto, ejecucion, tests } = await corregirTarea(tarea, codigo);
 
       // Registrar el intento (si falla el registro, la corrección no se ve afectada)
@@ -799,10 +813,23 @@ export const tareaResolvers = {
         puntos: 0,
         tiempo: null as string | null,
         mensaje: correcto ? '' : mensajeFallo,
+        revelacion: null as any,
+        insigniasNuevas: [] as string[],
       };
 
       if (!correcto) {
         return respuesta;
+      }
+
+      // Sabotaje resuelto: se revela qué había cambiado el saboteador
+      const sabotaje = tarea.tipo === 'sabotaje' ? await sabotajePorTarea(tarea.id) : null;
+      if (sabotaje) {
+        respuesta.revelacion = {
+          operador: sabotaje.operador,
+          descripcion: sabotaje.descripcion,
+          linea: sabotaje.linea,
+          diff: sabotaje.diff,
+        };
       }
 
       const puntosBase = tarea.puntos_base || tarea.puntos_nivel;
@@ -837,6 +864,20 @@ export const tareaResolvers = {
         }
         console.error('Error al guardar la tarea completada:', error);
         throw new Error('Error interno del servidor');
+      }
+
+      // Insignia «Cirujano»: arreglar el sabotaje cambiando como mucho las líneas que cambió el saboteador
+      if (sabotaje && esArregloQuirurgico(tarea.codigo_base, codigo, sabotaje.lineas_cambiadas)) {
+        try {
+          const r = await query(
+            `INSERT IGNORE INTO insignias_usuarios (usuario_id, insignia_id)
+             SELECT ?, id FROM insignias WHERE nombre = 'Cirujano'`,
+            [usuario.id]
+          ) as any;
+          if (r.affectedRows > 0) respuesta.insigniasNuevas.push('Cirujano');
+        } catch (error) {
+          console.error('No se pudo dar la insignia Cirujano:', error);
+        }
       }
 
       return {

@@ -5,6 +5,7 @@ import { nivelTypeDefs } from './graphql/schemas/nivelSchema';
 import { tareaTypeDefs } from './graphql/schemas/tareaSchema';
 import { codeExecutionTypeDefs } from './graphql/schemas/codeExecutionSchema';
 import { iaTypeDefs } from './graphql/schemas/iaSchema';
+import { sabotajeTypeDefs } from './graphql/schemas/sabotajeSchema';
 
 const baseTypeDefs = gql`
   type Query {
@@ -16,4 +17,4 @@ const baseTypeDefs = gql`
   }
 `;
 
-export const typeDefs = [baseTypeDefs, userTypeDefs, categoriaTypeDefs, nivelTypeDefs, tareaTypeDefs, codeExecutionTypeDefs, iaTypeDefs];
+export const typeDefs = [baseTypeDefs, userTypeDefs, categoriaTypeDefs, nivelTypeDefs, tareaTypeDefs, codeExecutionTypeDefs, iaTypeDefs, sabotajeTypeDefs];

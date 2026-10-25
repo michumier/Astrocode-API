@@ -27,15 +27,41 @@ http.createServer((req, res) => {
     const sistema = json.messages?.[0]?.content || '';
     const usuario = json.messages?.[1]?.content || '';
     let content;
-    if (sistema.includes('objeto JSON')) {
+    if (sistema.includes('saboteador')) {
+      // Sabotaje "con IA": recibe la solución numerada ("  7|     codigo") y cambia la última línea
+      // que tenga una comparación o un `not` (la sangría se omite a propósito: la API debe conservarla)
+      const numerada = usuario.split('<solucion_correcta>\n')[1]?.split('\n</solucion_correcta>')[0] || '';
+      const lineas = numerada.split('\n').map((l) => ({ n: Number(l.slice(0, 3)), texto: l.slice(5) }));
+      const cambiosPosibles = [[' != ', ' == '], [' == ', ' != '], [' < ', ' <= '], [' > ', ' >= '], ['not ', '']];
+      let cambio = null;
+      for (const linea of [...lineas].reverse()) {
+        const par = cambiosPosibles.find(([a]) => linea.texto.includes(a));
+        if (par && !/^\s*(def|class)\s/.test(linea.texto)) {
+          cambio = { linea: linea.n, nuevo: linea.texto.replace(par[0], par[1]).trim(), descripcion: `mock: '${par[0].trim()}' por '${par[1].trim()}'` };
+          break;
+        }
+      }
+      content = JSON.stringify({
+        cambios: cambio ? [{ linea: cambio.linea, nuevo: cambio.nuevo }] : [],
+        descripcion: cambio?.descripcion || 'sin cambios',
+        contexto: 'La IA de a bordo sospecha de una condición.',
+      });
+    } else if (sistema.includes('objeto JSON')) {
       content = '```json\n' + JSON.stringify(ejercicio) + '\n```';
+    } else if (usuario.includes('FUGA_SABOTAJE')) {
+      // Simula una IA que, en una pista de sabotaje, dice la línea exacta
+      content = 'El problema está en la línea 5, revísala.';
     } else if (usuario.includes('FILTRAR')) {
       // Simula una IA que se salta las reglas y suelta la solución
       const sol = usuario.split('no la reveles):\n')[1]?.split('\n<codigo_alumno>')[0] || '';
       content = 'Aquí tienes: ' + sol;
     } else {
       const razonamiento = json.chat_template_kwargs?.enable_thinking === false ? 'off' : 'on';
-      content = `Pista de prueba (modelo ${json.model}, auth ${auth.startsWith('Bearer ') ? 'ok' : 'NO'}, razonamiento ${razonamiento}): piensa en cómo recorrer cada elemento.`;
+      // Si la pista es de un sabotaje, se indica para que las pruebas comprueben que llega la información
+      const sabotaje = usuario.includes('MISIÓN DE SABOTAJE')
+        ? `, sabotaje, solucion ${usuario.includes('Solución de referencia') ? 'si' : 'no'}, confidencial ${usuario.includes('CONFIDENCIAL:') ? 'si' : 'no'}`
+        : '';
+      content = `Pista de prueba (modelo ${json.model}, auth ${auth.startsWith('Bearer ') ? 'ok' : 'NO'}, razonamiento ${razonamiento}${sabotaje}): piensa en cómo recorrer cada elemento.`;
     }
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content } }] }));

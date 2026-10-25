@@ -16,6 +16,9 @@ jobs:
       - run: npm ci
       - name: Compilar TypeScript y pruebas unitarias
         run: npm test
+      - name: Pruebas del mutador de sabotajes (Python)
+        working-directory: python-runner
+        run: python3 -m unittest -v test_mutador
 
   docker:
     runs-on: ubuntu-latest

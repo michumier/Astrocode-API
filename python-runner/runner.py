@@ -20,6 +20,8 @@ import tempfile
 
 from flask import Flask, jsonify, request
 
+from mutador import mutar
+
 app = Flask(__name__)
 
 TIMEOUT_SEGUNDOS = int(os.environ.get('RUNNER_TIMEOUT', '5'))
@@ -101,6 +103,29 @@ def run_code():
         return jsonify({'stdout': '', 'stderr': f'Error del servidor: {e}', 'exit_code': 1}), 500
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
+
+
+@app.route('/mutate', methods=['POST'])
+def mutate():
+    """
+    Genera variantes saboteadas de un programa (solo lo analiza, no lo ejecuta).
+    Recibe: { "code": "...", "max": 12, "semilla": 0 }
+    Devuelve: { "variantes": [{ codigo, operador, descripcion, linea, lineas_cambiadas, diff }] }
+    """
+    data = request.get_json(silent=True)
+    if not data or not isinstance(data.get('code'), str):
+        return jsonify({'error': 'No se proporcionó código'}), 400
+    try:
+        variantes = mutar(
+            data['code'],
+            max_variantes=min(int(data.get('max', 12)), 50),
+            semilla=int(data.get('semilla', 0)),
+        )
+    except SyntaxError as e:
+        return jsonify({'error': f'La solución tiene un error de sintaxis: {e}'}), 400
+    except (ValueError, RecursionError) as e:
+        return jsonify({'error': str(e)}), 400
+    return jsonify({'variantes': variantes})
 
 
 @app.route('/health', methods=['GET'])

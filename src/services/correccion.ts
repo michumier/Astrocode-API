@@ -92,3 +92,44 @@ export async function corregirTarea(tarea: any, codigo: string): Promise<Correcc
 }
 
 const ultimaLinea = (texto: string) => texto.trim().split('\n').pop() || null;
+
+export interface Evaluacion {
+  // false si el programa da error nada más ejecutarse (sintaxis, NameError a nivel de módulo...)
+  seEjecuta: boolean;
+  total: number;
+  superados: number;
+  fallidosVisibles: number;
+  fallidosOcultos: number;
+}
+
+/**
+ * Ejecuta los tests de una tarea sobre un código cualquiera y devuelve solo los recuentos.
+ * Uso interno (verificación de sabotajes): no se envía nunca al alumno.
+ */
+export async function evaluarCodigo(tareaId: string | number, codigo: string): Promise<Evaluacion> {
+  const tests = await query(
+    'SELECT codigo_test, entrada, salida_esperada, oculto FROM tests_tarea WHERE tarea_id = ? ORDER BY orden, id',
+    [tareaId]
+  ) as any[];
+
+  const base = await ejecutarPython(codigo);
+  const evaluacion: Evaluacion = { seEjecuta: base.status.id === 3, total: tests.length, superados: 0, fallidosVisibles: 0, fallidosOcultos: 0 };
+
+  for (const test of tests) {
+    let superado = false;
+    if (evaluacion.seEjecuta) {
+      const programa = test.codigo_test ? `${codigo}\n\n${test.codigo_test}` : codigo;
+      const r = await ejecutarPython(programa, test.entrada || '');
+      const salidaBase = normalizarSalida(base.stdout);
+      let obtenido = normalizarSalida(r.stdout);
+      if (test.codigo_test && salidaBase && obtenido.startsWith(salidaBase)) {
+        obtenido = obtenido.slice(salidaBase.length).trim();
+      }
+      superado = r.status.id === 3 && obtenido === normalizarSalida(test.salida_esperada);
+    }
+    if (superado) evaluacion.superados++;
+    else if (test.oculto) evaluacion.fallidosOcultos++;
+    else evaluacion.fallidosVisibles++;
+  }
+  return evaluacion;
+}

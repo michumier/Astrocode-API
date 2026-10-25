@@ -2,6 +2,7 @@ import { query } from '../../config/db';
 import { Context, requireAuth, requireAdmin, UserInputError, ForbiddenError } from '../errors';
 import { iaDisponible, generarPista, generarEjercicio, EjercicioIA } from '../../services/ia';
 import { ejecutarPython, normalizarSalida } from '../../services/pythonRunner';
+import { puedeAbrirTarea, sabotajePorTarea } from '../../services/sabotajes';
 
 const PISTAS_POR_DIA = Number(process.env.PISTAS_POR_DIA || 20);
 
@@ -49,11 +50,15 @@ export const iaResolvers = {
         throw new ForbiddenError(`Has usado tus ${PISTAS_POR_DIA} pistas de hoy. ¡Mañana tendrás más!`);
       }
 
-      const tareas = await query('SELECT id, titulo, descripcion, solucion FROM tareas WHERE id = ?', [tareaId]) as any[];
+      const tareas = await query('SELECT id, titulo, descripcion, solucion, tipo, config FROM tareas WHERE id = ?', [tareaId]) as any[];
       if (tareas.length === 0) {
         throw new UserInputError('Tarea no encontrada');
       }
       const tarea = tareas[0];
+      if (!(await puedeAbrirTarea(usuario, tarea))) {
+        throw new ForbiddenError('Completa primero el ejercicio original para desbloquear este sabotaje');
+      }
+      const sabotaje = tarea.tipo === 'sabotaje' ? await sabotajePorTarea(tarea.id) : null;
 
       // Tests visibles, para que la IA sepa qué se espera
       const tests = await query(
@@ -69,6 +74,7 @@ export const iaResolvers = {
         solucion: tarea.solucion,
         testsFallidos: tests.map((t) => `${t.descripcion} → debería dar ${t.salida_esperada}`),
         nivel: Math.min(Math.max(Math.floor(nivel), 1), 3),
+        sabotaje: sabotaje ? { descripcion: sabotaje.descripcion, linea: sabotaje.linea, diff: sabotaje.diff } : null,
       });
 
       await query('INSERT INTO pistas_ia (usuario_id, tarea_id) VALUES (?, ?)', [usuario.id, tareaId]);
