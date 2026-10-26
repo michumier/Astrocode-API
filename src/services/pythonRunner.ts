@@ -85,6 +85,44 @@ export async function mutarCodigo(codigo: string, max = 12, semilla = 0): Promis
   }
 }
 
+export interface EscenarioMision {
+  semilla: number;
+  params?: Record<string, number>;
+  oculto?: boolean;
+  nombre?: string;
+}
+
+export interface ResultadoEscenario {
+  nombre: string;
+  oculto: boolean;
+  exito: boolean;
+  motivo: string;
+  ticks: number;
+  estrellas: number;
+  metricas: Record<string, number>;
+  error_codigo: boolean;
+  fotogramas?: any[];
+  registro?: { t: number; texto: string }[];
+  escena?: any;
+}
+
+// Ejecuta una misión de pilotaje en el runner (el código del alumno corre en un proceso aparte)
+export async function ejecutarMision(codigo: string, mision: string, escenarios: EscenarioMision[]): Promise<ResultadoEscenario[]> {
+  if (codigo.length > MAX_CODE_LENGTH) {
+    throw new Error(`El código no puede superar ${MAX_CODE_LENGTH} caracteres`);
+  }
+  try {
+    const { data } = await axios.post(
+      `${PYTHON_RUNNER_URL}/mision`,
+      { code: codigo, mision, escenarios },
+      { headers: { 'Content-Type': 'application/json' }, timeout: 90000 }
+    );
+    return data.resultados;
+  } catch (error: any) {
+    throw new Error(error.response?.data?.error || 'No se pudo conectar con el python-runner para la misión');
+  }
+}
+
 // Compara salidas ignorando saltos de línea Windows/Unix y espacios al final de cada línea
 export function normalizarSalida(texto: string): string {
   return texto

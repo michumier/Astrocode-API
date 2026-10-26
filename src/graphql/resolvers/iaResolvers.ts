@@ -75,6 +75,7 @@ export const iaResolvers = {
         testsFallidos: tests.map((t) => `${t.descripcion} → debería dar ${t.salida_esperada}`),
         nivel: Math.min(Math.max(Math.floor(nivel), 1), 3),
         sabotaje: sabotaje ? { descripcion: sabotaje.descripcion, linea: sabotaje.linea, diff: sabotaje.diff } : null,
+        mision: tarea.tipo === 'pilotaje' ? (typeof tarea.config === 'string' ? JSON.parse(tarea.config) : tarea.config)?.mision : null,
       });
 
       await query('INSERT INTO pistas_ia (usuario_id, tarea_id) VALUES (?, ?)', [usuario.id, tareaId]);

@@ -1,6 +1,7 @@
 import { PoolConnection } from 'mysql2/promise';
 import { pool } from '../config/db';
 import { testsRetosDiarios } from './seeds/retosDiarios';
+import { misionesIniciales } from './seeds/misiones';
 
 /*
  * Migraciones de la base de datos.
@@ -143,6 +144,28 @@ const migraciones: Migracion[] = [
     id: '011_insignia_cirujano',
     sql: `INSERT IGNORE INTO insignias (nombre, descripcion, url_imagen)
           VALUES ('Cirujano', 'Arregló un sabotaje cambiando el mínimo de líneas posible.', 'https://img.icons8.com/color/96/scalpel.png')`,
+  },
+  {
+    // Fase 2: las tres misiones de pilotaje iniciales
+    id: '012_misiones_pilotaje',
+    run: async (conn) => {
+      for (const m of misionesIniciales) {
+        const [existe] = await conn.query("SELECT id FROM tareas WHERE titulo = ? AND tipo = 'pilotaje'", [m.titulo]) as any[];
+        if ((existe as any[]).length) continue;
+        const [cat] = await conn.query('SELECT id FROM categorias WHERE nombre = ?', [m.categoria]) as any[];
+        const [niv] = await conn.query('SELECT id FROM niveles WHERE nombre = ?', [m.nivel]) as any[];
+        if (!(cat as any[]).length || !(niv as any[]).length) {
+          console.warn(`Misión «${m.titulo}» omitida: no existe la categoría o el nivel`);
+          continue;
+        }
+        await conn.query(
+          `INSERT INTO tareas (categoria_id, nivel_id, titulo, descripcion, codigo_base, resultado_esperado, solucion, puntos_base, tipo, config)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pilotaje', ?)`,
+          [(cat as any[])[0].id, (niv as any[])[0].id, m.titulo, m.descripcion, m.codigoBase, m.resultadoEsperado,
+           m.solucion, m.puntos, JSON.stringify(m.config)]
+        );
+      }
+    },
   },
 ];
 

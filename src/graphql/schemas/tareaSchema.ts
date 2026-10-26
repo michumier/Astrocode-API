@@ -7,6 +7,8 @@ export const tareaTypeDefs = gql`
     tipo: String!
     # Ambientación de los sabotajes (null en el resto)
     contexto: String
+    # Solo en misiones de pilotaje: qué misión es y sus escenarios visibles
+    mision: InfoMision
     categoria: Categoria!
     nivel: Nivel!
     titulo: String!
@@ -106,6 +108,9 @@ export const tareaTypeDefs = gql`
     # Actualizar una tarea existente
     actualizarTarea(id: ID!, input: ActualizarTareaInput!): Tarea!
     
+    # Misiones: lanza un escenario visible para ver el vuelo, sin corregir ni puntuar
+    probarMision(tareaId: ID!, codigo: String!, escenario: Int): ResultadoMision!
+
     # Enviar una solución: el servidor ejecuta el código, lo corrige y suma los puntos
     enviarSolucion(tareaId: ID!, codigo: String!, tiempoCompletado: Int!): ResultadoSolucion!
     
@@ -140,6 +145,40 @@ export const tareaTypeDefs = gql`
     resultados: [ResultadoTest!]!
   }
 
+  type InfoMision {
+    # aterrizaje | asteroides | cristales
+    id: String!
+    # Nombres de los escenarios visibles (se pueden probar uno a uno)
+    escenarios: [String!]!
+    ocultos: Int!
+  }
+
+  type RegistroPiloto {
+    t: Int!
+    texto: String!
+  }
+
+  type ResultadoEscenarioMision {
+    nombre: String!
+    oculto: Boolean!
+    exito: Boolean!
+    motivo: String!
+    ticks: Int!
+    estrellas: Int!
+    # JSON en texto (null en los escenarios ocultos)
+    metricas: String
+    fotogramas: String
+    escena: String
+    registro: [RegistroPiloto!]!
+  }
+
+  type ResultadoMision {
+    estrellas: Int!
+    superados: Int!
+    total: Int!
+    escenarios: [ResultadoEscenarioMision!]!
+  }
+
   type RevelacionSabotaje {
     operador: String!
     descripcion: String!
@@ -152,6 +191,8 @@ export const tareaTypeDefs = gql`
     # Solo en sabotajes resueltos: qué había cambiado el saboteador
     revelacion: RevelacionSabotaje
     insigniasNuevas: [String!]!
+    # Solo en misiones de pilotaje
+    mision: ResultadoMision
     tests: ResultadoTests
     yaCompletada: Boolean!
     puntos: Int!
