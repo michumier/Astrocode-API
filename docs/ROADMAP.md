@@ -10,7 +10,7 @@
 | **0** ✅ | Base común: editor de código de verdad, router con URLs, registro de intentos, tipos de tarea, pruebas de extremo a extremo en CI | M | — |
 | **1** ✅ | 🕵️ **Sabotaje**: el sistema rompe una solución y el alumno encuentra el fallo | M | 0 |
 | **2** ✅ | 🚀 **Misiones de pilotaje**: el código del alumno controla una nave en una simulación | L | 0 |
-| **3** | 🔭 **Caja negra**: ver la ejecución paso a paso con las variables animadas | M | 0 (editor) |
+| **3** ✅ | 🔭 **Caja negra**: ver la ejecución paso a paso con las variables animadas | M | 0 (editor) |
 | **4** | 📊 **Puente de mando**: analíticas para profesores | M | 0 (intentos) |
 
 Tamaños: **S** ≈ una tarde · **M** ≈ 2-4 sesiones · **L** ≈ 5 o más sesiones.
@@ -299,10 +299,12 @@ estrellas: 1 = aterriza · 2 = sobra ≥ 30 % combustible · 3 = sobra ≥ 50 %
 - CA-3.3 Con `while True:` se corta en 1.000 pasos con aviso, sin colgarse.
 
 ### Tareas
-- [ ] Trazador en el runner con serializador seguro y tests (M)
-- [ ] Mutations en la API (S)
-- [ ] Componente `CajaNegra`: línea temporal, variables y pila (L)
-- [ ] «Ver qué pasó en este test» desde el resultado de los tests (S)
+- [x] Trazador en el runner con serializador seguro y tests (M)
+- [x] Mutations en la API (S)
+- [x] Componente `CajaNegra`: línea temporal, variables y pila (L)
+- [x] «Ver qué pasó en este test» desde el resultado de los tests (S)
+
+> Hecho en `feature/fase-3-caja-negra` (26-oct-2026). Resultados en `docs/pruebas/fase-3.md`. Pendiente: RF-3.8 (flechas de aliasing).
 
 ---
 

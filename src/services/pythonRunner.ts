@@ -123,6 +123,30 @@ export async function ejecutarMision(codigo: string, mision: string, escenarios:
   }
 }
 
+export interface Traza {
+  pasos: any[];
+  salida: string;
+  error: string | null;
+  truncado: boolean;
+}
+
+// Caja negra: ejecución paso a paso con las variables de cada nivel de la pila
+export async function trazarCodigo(codigo: string, stdin = '', test: string | null = null): Promise<Traza> {
+  if (codigo.length > MAX_CODE_LENGTH) {
+    throw new Error(`El código no puede superar ${MAX_CODE_LENGTH} caracteres`);
+  }
+  try {
+    const { data } = await axios.post(
+      `${PYTHON_RUNNER_URL}/trace`,
+      { code: codigo, stdin, test },
+      { headers: { 'Content-Type': 'application/json' }, timeout: 20000, maxContentLength: 5_000_000 }
+    );
+    return data;
+  } catch (error: any) {
+    throw new Error(error.response?.data?.error || 'No se pudo conectar con el python-runner para trazar el código');
+  }
+}
+
 // Compara salidas ignorando saltos de línea Windows/Unix y espacios al final de cada línea
 export function normalizarSalida(texto: string): string {
   return texto

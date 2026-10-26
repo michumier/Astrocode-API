@@ -22,6 +22,7 @@ from flask import Flask, jsonify, request
 from mutador import mutar
 from sandbox import TIMEOUT_SEGUNDOS, MEMORIA_MAX_MB, limitar_recursos, entorno_limpio
 from misiones.motor import ejecutar_mision
+from trazador import trazar
 
 app = Flask(__name__)
 
@@ -136,6 +137,22 @@ def mision():
     except ValueError as e:
         return jsonify({'error': str(e)}), 400
     return jsonify({'resultados': resultados})
+
+
+@app.route('/trace', methods=['POST'])
+def trace():
+    """
+    Caja negra: ejecuta el código paso a paso y devuelve la traza.
+    Recibe: { "code": "...", "stdin": "", "test": "código opcional que llama a las funciones del alumno" }
+    Devuelve: { pasos: [{linea, evento, pila: [{funcion, linea, vars}], salida, retorno?, excepcion?}],
+                salida, error, truncado }
+    """
+    data = request.get_json(silent=True)
+    if not data or not isinstance(data.get('code'), str):
+        return jsonify({'error': 'No se proporcionó código'}), 400
+    if len(data['code']) > MAX_CODIGO or len(data.get('test') or '') > MAX_CODIGO:
+        return jsonify({'error': 'El código es demasiado largo'}), 400
+    return jsonify(trazar(data['code'], data.get('stdin') or '', data.get('test') or None))
 
 
 @app.route('/health', methods=['GET'])
