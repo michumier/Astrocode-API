@@ -12,7 +12,6 @@ Capas de aislamiento:
 """
 
 import os
-import resource
 import shutil
 import subprocess
 import sys
@@ -21,24 +20,13 @@ import tempfile
 from flask import Flask, jsonify, request
 
 from mutador import mutar
+from sandbox import TIMEOUT_SEGUNDOS, MEMORIA_MAX_MB, limitar_recursos, entorno_limpio
+from misiones.motor import ejecutar_mision
 
 app = Flask(__name__)
 
-TIMEOUT_SEGUNDOS = int(os.environ.get('RUNNER_TIMEOUT', '5'))
-MEMORIA_MAX_MB = int(os.environ.get('RUNNER_MEMORY_MB', '256'))
 MAX_CODIGO = 20_000          # caracteres
 MAX_SALIDA = 64 * 1024       # caracteres devueltos de stdout/stderr
-
-
-def limitar_recursos():
-    """Se ejecuta en el proceso hijo justo antes de lanzar el código del alumno."""
-    memoria = MEMORIA_MAX_MB * 1024 * 1024
-    resource.setrlimit(resource.RLIMIT_CPU, (TIMEOUT_SEGUNDOS, TIMEOUT_SEGUNDOS + 1))
-    resource.setrlimit(resource.RLIMIT_AS, (memoria, memoria))
-    resource.setrlimit(resource.RLIMIT_FSIZE, (1024 * 1024, 1024 * 1024))  # archivos de 1 MB máx.
-    resource.setrlimit(resource.RLIMIT_NPROC, (64, 64))                   # evita fork bombs
-    resource.setrlimit(resource.RLIMIT_NOFILE, (64, 64))
-    os.setsid()
 
 
 def recortar(texto):
@@ -78,7 +66,7 @@ def run_code():
                 errors='replace',
                 timeout=TIMEOUT_SEGUNDOS + 1,
                 cwd=workdir,
-                env={'PYTHONIOENCODING': 'utf-8', 'HOME': workdir, 'PATH': '/usr/local/bin:/usr/bin'},
+                env=entorno_limpio(workdir),
                 preexec_fn=limitar_recursos,
             )
         except subprocess.TimeoutExpired:
@@ -126,6 +114,28 @@ def mutate():
     except (ValueError, RecursionError) as e:
         return jsonify({'error': str(e)}), 400
     return jsonify({'variantes': variantes})
+
+
+@app.route('/mision', methods=['POST'])
+def mision():
+    """
+    Ejecuta una misión de pilotaje con el código del alumno.
+    Recibe: { "code": "...", "mision": "aterrizaje", "escenarios": [{semilla, params, oculto, nombre}] }
+    Devuelve: { "resultados": [{ exito, motivo, ticks, estrellas, metricas, nombre, oculto,
+                                 fotogramas?, registro?, escena? }] }   (los ocultos sin detalle)
+    """
+    data = request.get_json(silent=True)
+    if not data or not isinstance(data.get('code'), str) or not isinstance(data.get('escenarios'), list):
+        return jsonify({'error': 'Faltan el código o los escenarios'}), 400
+    if len(data['code']) > MAX_CODIGO:
+        return jsonify({'error': 'El código es demasiado largo'}), 400
+    if not 1 <= len(data['escenarios']) <= 10:
+        return jsonify({'error': 'Entre 1 y 10 escenarios'}), 400
+    try:
+        resultados = ejecutar_mision(data['code'], data.get('mision', ''), data['escenarios'])
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    return jsonify({'resultados': resultados})
 
 
 @app.route('/health', methods=['GET'])

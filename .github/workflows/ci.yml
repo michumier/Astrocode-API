@@ -16,9 +16,9 @@ jobs:
       - run: npm ci
       - name: Compilar TypeScript y pruebas unitarias
         run: npm test
-      - name: Pruebas del mutador de sabotajes (Python)
+      - name: Pruebas del mutador y de las simulaciones (Python)
         working-directory: python-runner
-        run: python3 -m unittest -v test_mutador
+        run: python3 -m unittest -v test_mutador test_misiones
 
   docker:
     runs-on: ubuntu-latest
@@ -28,6 +28,11 @@ jobs:
         run: docker build --target prod -t astrocode-api .
       - name: Imagen del python-runner
         run: docker build -t astrocode-python-runner ./python-runner
+      - name: Motor de misiones con procesos aislados (dentro del contenedor)
+        run: >
+          docker run --rm --read-only --tmpfs /tmp --cap-drop ALL
+          -v "$PWD/python-runner:/src:ro" -w /src -e PYTHONDONTWRITEBYTECODE=1
+          astrocode-python-runner python -X dev -m unittest -v test_motor
       - name: El runner aísla el código del alumno
         run: |
           docker run -d --name runner --read-only --tmpfs /tmp --cap-drop ALL -p 5000:5000 astrocode-python-runner

@@ -60,7 +60,9 @@ http.createServer((req, res) => {
       // Si la pista es de un sabotaje, se indica para que las pruebas comprueben que llega la información
       const sabotaje = usuario.includes('MISIÓN DE SABOTAJE')
         ? `, sabotaje, solucion ${usuario.includes('Solución de referencia') ? 'si' : 'no'}, confidencial ${usuario.includes('CONFIDENCIAL:') ? 'si' : 'no'}`
-        : '';
+        : usuario.includes('MISIÓN DE PILOTAJE')
+          ? `, mision, solucion ${usuario.includes('Solución de referencia') ? 'si' : 'no'}`
+          : '';
       content = `Pista de prueba (modelo ${json.model}, auth ${auth.startsWith('Bearer ') ? 'ok' : 'NO'}, razonamiento ${razonamiento}${sabotaje}): piensa en cómo recorrer cada elemento.`;
     }
     res.writeHead(200, { 'Content-Type': 'application/json' });

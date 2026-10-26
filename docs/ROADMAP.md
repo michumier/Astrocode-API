@@ -9,7 +9,7 @@
 |---|---|---|---|
 | **0** ✅ | Base común: editor de código de verdad, router con URLs, registro de intentos, tipos de tarea, pruebas de extremo a extremo en CI | M | — |
 | **1** ✅ | 🕵️ **Sabotaje**: el sistema rompe una solución y el alumno encuentra el fallo | M | 0 |
-| **2** | 🚀 **Misiones de pilotaje**: el código del alumno controla una nave en una simulación | L | 0 |
+| **2** ✅ | 🚀 **Misiones de pilotaje**: el código del alumno controla una nave en una simulación | L | 0 |
 | **3** | 🔭 **Caja negra**: ver la ejecución paso a paso con las variables animadas | M | 0 (editor) |
 | **4** | 📊 **Puente de mando**: analíticas para profesores | M | 0 (intentos) |
 
@@ -30,7 +30,7 @@ Cada decisión lleva la opción que recomiendo; si no se dice otra cosa, se apli
 | D1 ✅ | Editor de código | **CodeMirror 6** (ligero, con buen resaltado de Python y marcado de líneas). Monaco pesa unos 5 MB. |
 | D2 ✅ | Navegación | **Migrar a `react-router-dom`** (ya está instalado) en la fase 0. Se van a añadir 5 vistas más y el router casero no da URLs ni botón «atrás». |
 | D3 ✅ | Cómo se generan los sabotajes | **Mutaciones del árbol de sintaxis (AST)** como método principal: gratis, deterministas y sin IA. La **IA es opcional**, para bugs más «humanos». |
-| D4 | Seguridad de las misiones | El código del alumno corre en un **proceso separado** de la simulación y se comunican por JSON. Así no puede tocar el estado de la simulación para hacer trampa. |
+| D4 ✅ | Seguridad de las misiones | El código del alumno corre en un **proceso separado** de la simulación y se comunican por JSON. Así no puede tocar el estado de la simulación para hacer trampa. |
 | D5 | Roles del puente de mando | **v1: un rol nuevo `profesor`** (el admin también entra), con estadísticas globales. **v2: grupos o clases** con código de invitación. |
 | D6 ✅ | Guardar el código de cada intento | **Sí**, con una retención de 180 días y un aviso en el registro. Hace falta para el puente de mando y para la repetición de intentos. |
 
@@ -252,13 +252,16 @@ estrellas: 1 = aterriza · 2 = sobra ≥ 30 % combustible · 3 = sobra ≥ 50 %
 - CA-2.5 Un intento de leer o modificar el estado del motor desde el código del alumno no tiene efecto.
 
 ### Tareas
-- [ ] Motor base, protocolo JSON y proceso separado del alumno (L)
-- [ ] M1 con tests unitarios del motor (M)
-- [ ] Endpoint `/mision`, corrector en la API y `probarMision` (M)
-- [ ] Visor en canvas y panel de resultados (L)
-- [ ] Integración en el sistema solar y desbloqueo (S)
-- [ ] M2 (M) · M3 (M)
-- [ ] Pruebas de seguridad del motor (S)
+- [x] Motor base, protocolo JSON y proceso separado del alumno (L)
+- [x] M1 con tests unitarios del motor (M)
+- [x] Endpoint `/mision`, corrector en la API y `probarMision` (M)
+- [x] Visor en canvas y panel de resultados (L)
+- [x] Integración en el sistema solar y desbloqueo (S)
+- [x] M2 (M) · M3 (M)
+- [x] Pruebas de seguridad del motor (S)
+- [x] Extra: gráfica de altura y velocidad (RF-2.10), registro de vuelo (RF-2.9), borrador guardado en el navegador
+
+> Hecho en `feature/fase-2-pilotaje` (26-oct-2026). Resultados y decisiones en `docs/pruebas/fase-2.md`. Pendiente: RF-2.11 (récords) y RF-2.12 (vuelos fantasma).
 
 **Riesgos:** el ajuste de la física (que M1 no sea ni trivial ni imposible) se resuelve con una solución de referencia y probando varias semillas. La comunicación por tick puede ser lenta; si hiciera falta, el alumno podría responder por lotes de ticks.
 

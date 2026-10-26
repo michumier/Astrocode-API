@@ -1,6 +1,7 @@
 import { query, transaction } from '../../config/db';
 import { corregirTarea } from '../../services/correccion';
 import { clasificarError } from '../../services/errores';
+import { corregirMision, comoEjecucion, tipoErrorMision, misionParaGraphQL, infoMision, probarEscenario } from '../../services/misiones';
 import { GraphQLError } from 'graphql';
 import { UserInputError, ForbiddenError, Context, requireAuth, requireAdmin } from '../errors';
 import { puedeAbrirTarea, sabotajePorTarea, esArregloQuirurgico } from '../../services/sabotajes';
@@ -73,6 +74,8 @@ export const tareaResolvers = {
   Tarea: {
     // Las tareas antiguas o construidas a mano pueden no traer el tipo
     tipo: (parent: any) => parent.tipo || 'codigo',
+    // Misiones: id y escenarios visibles (sin semillas ni datos de los ocultos)
+    mision: (parent: any) => (parent.tipo === 'pilotaje' && parent.config ? infoMision(parent) : null),
     // Ambientación de los sabotajes (guardada en config)
     contexto: (parent: any) => {
       if (!parent.config) return null;
@@ -764,6 +767,20 @@ export const tareaResolvers = {
 
     // Corrige la solución EN EL SERVIDOR: ejecuta el código, compara con el resultado
     // esperado y solo entonces suma los puntos. El cliente ya no decide si está bien.
+    probarMision: async (
+      _: any,
+      { tareaId, codigo, escenario = 0 }: { tareaId: string; codigo: string; escenario?: number },
+      context: Context
+    ) => {
+      const usuario = requireAuth(context, 'Debes estar autenticado para lanzar una misión');
+      const filas = await query('SELECT id, tipo, config FROM tareas WHERE id = ?', [tareaId]) as any[];
+      const tarea = filas[0];
+      if (!tarea) throw new UserInputError('Tarea no encontrada');
+      if (tarea.tipo !== 'pilotaje') throw new UserInputError('Esta tarea no es una misión de pilotaje');
+      if (!(await puedeAbrirTarea(usuario, tarea))) throw new ForbiddenError('No puedes abrir esta tarea');
+      return misionParaGraphQL(await probarEscenario(tarea, codigo, escenario));
+    },
+
     enviarSolucion: async (
       _: any,
       { tareaId, codigo, tiempoCompletado }: { tareaId: string; codigo: string; tiempoCompletado: number },
@@ -784,22 +801,30 @@ export const tareaResolvers = {
       if (!(await puedeAbrirTarea(usuario, tarea))) {
         throw new ForbiddenError('Completa primero el ejercicio original para desbloquear este sabotaje');
       }
-      const { correcto, ejecucion, tests } = await corregirTarea(tarea, codigo);
+      // Las misiones de pilotaje se corrigen simulando sus escenarios; el resto, con tests o salida
+      const mision = tarea.tipo === 'pilotaje' ? await corregirMision(tarea, codigo) : null;
+      const { correcto, ejecucion, tests } = mision
+        ? { correcto: mision.correcto, ejecucion: comoEjecucion(mision), tests: null }
+        : await corregirTarea(tarea, codigo);
 
       // Registrar el intento (si falla el registro, la corrección no se ve afectada)
       try {
         await query(
           `INSERT INTO intentos (usuario_id, tarea_id, codigo, correcto, tests_superados, tests_totales, tipo_error, segundos_en_tarea)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-          [usuario.id, tarea.id, codigo, correcto ? 1 : 0, tests?.superados ?? null, tests?.total ?? null,
-           clasificarError(ejecucion, correcto, !!tests), Math.max(0, Math.floor(tiempoCompletado || 0))]
+          [usuario.id, tarea.id, codigo, correcto ? 1 : 0, mision?.superados ?? tests?.superados ?? null,
+           mision?.total ?? tests?.total ?? null,
+           mision ? tipoErrorMision(mision) : clasificarError(ejecucion, correcto, !!tests),
+           Math.max(0, Math.floor(tiempoCompletado || 0))]
         );
       } catch (error) {
         console.error('No se pudo registrar el intento:', error);
       }
 
       let mensajeFallo = 'Tu código ha dado un error. Revisa la salida de errores.';
-      if (tests && ejecucion.status.id === 3) {
+      if (mision) {
+        mensajeFallo = `Misión superada en ${mision.superados} de ${mision.total} escenarios. ¡Revisa los que fallan!`;
+      } else if (tests && ejecucion.status.id === 3) {
         mensajeFallo = `Has superado ${tests.superados} de ${tests.total} tests. ¡Revisa los que fallan!`;
       } else if (ejecucion.status.id === 3) {
         mensajeFallo = 'La salida no coincide con el resultado esperado. ¡Revisa tu código!';
@@ -815,6 +840,7 @@ export const tareaResolvers = {
         mensaje: correcto ? '' : mensajeFallo,
         revelacion: null as any,
         insigniasNuevas: [] as string[],
+        mision: mision ? misionParaGraphQL(mision) : null,
       };
 
       if (!correcto) {
@@ -833,7 +859,8 @@ export const tareaResolvers = {
       }
 
       const puntosBase = tarea.puntos_base || tarea.puntos_nivel;
-      const puntosBonus = tarea.puntos_bonus || 0;
+      // En las misiones, cada estrella por encima de la primera suma un 25 % extra
+      const puntosBonus = (tarea.puntos_bonus || 0) + (mision ? Math.round((puntosBase * (mision.estrellas - 1)) / 4) : 0);
       const puntosTotales = puntosBase + puntosBonus;
 
       // Convertir tiempo a formato TIME (HH:MM:SS)
