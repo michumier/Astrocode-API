@@ -11,7 +11,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copiar el código de la aplicación
-COPY runner.py mutador.py sandbox.py piloto_harness.py ./
+COPY runner.py mutador.py sandbox.py piloto_harness.py trazador.py trazador_harness.py ./
 COPY misiones/ ./misiones/
 
 # Usuario sin privilegios: el código de los alumnos nunca corre como root
