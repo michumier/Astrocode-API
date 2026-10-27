@@ -12,6 +12,7 @@
 | **2** ✅ | 🚀 **Misiones de pilotaje**: el código del alumno controla una nave en una simulación | L | 0 |
 | **3** ✅ | 🔭 **Caja negra**: ver la ejecución paso a paso con las variables animadas | M | 0 (editor) |
 | **4** | 📊 **Puente de mando**: analíticas para profesores | M | 0 (intentos) |
+| **5** | 🧪 **Retos insólitos**: 7 formatos nuevos (bomba, lengua alienígena, cámara acorazada, impostor, nebulosa, radio, colonia). Diseño en [`diseno/fase-5-retos.md`](diseno/fase-5-retos.md) | L+ (8 subfases) | 2 (motor de misiones) |
 
 Tamaños: **S** ≈ una tarde · **M** ≈ 2-4 sesiones · **L** ≈ 5 o más sesiones.
 
@@ -344,6 +345,23 @@ estrellas: 1 = aterriza · 2 = sobra ≥ 30 % combustible · 3 = sobra ≥ 50 %
 - [ ] Alumnos atascados y ficha con diff de intentos (M)
 - [ ] Script de datos de prueba (`seed-intentos`) para desarrollar con volumen (S)
 - [ ] CSV y resumen con IA (S)
+
+---
+
+## Fase 5 — 🧪 Retos insólitos
+
+Siete formatos de ejercicio nuevos sobre el motor de misiones: 💣 bomba, 👽 lengua alienígena, 🔐 cámara acorazada, 🔍 impostor, 🎨 nebulosa, 🎵 radio y 🧬 colonia.
+El diseño completo (requisitos, ejecución, frontales, riesgos y pruebas) está en **[`docs/diseno/fase-5-retos.md`](diseno/fase-5-retos.md)**. Aquí solo se lleva el avance.
+
+### Tareas
+- [ ] 5.0 Motor de retos (E1–E5), `tipo='reto'`, `VistaReto` (M)
+- [ ] 5.1 💣 Bomba: B1, B2 (M)
+- [ ] 5.2 👽 Lengua alienígena: L1, L2, L3 (M)
+- [ ] 5.3 🔐 Cámara acorazada: C1, C2 (S–M)
+- [ ] 5.4 🔍 Impostor: I1, I2 (M)
+- [ ] 5.5 🎨 Nebulosa: N1, N2 (S)
+- [ ] 5.6 🎵 Radio: R1, R2 (S–M)
+- [ ] 5.7 🧬 Colonia: Co1 (M)
 
 ---
 
