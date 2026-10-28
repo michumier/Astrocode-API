@@ -2,7 +2,7 @@ import { PoolConnection } from 'mysql2/promise';
 import { pool } from '../config/db';
 import { testsRetosDiarios } from './seeds/retosDiarios';
 import { misionesIniciales } from './seeds/misiones';
-import { retosBomba, retosLengua, retosCamara, RetoSemilla } from './seeds/retos';
+import { retosBomba, retosLengua, retosCamara, retosImpostor, RetoSemilla } from './seeds/retos';
 
 /*
  * Migraciones de la base de datos.
@@ -182,6 +182,11 @@ const migraciones: Migracion[] = [
     // Fase 5.3: 🔐 La huella del PIN (C1), La cámara de Ceres (C2) y La cerradura de combinación (C3)
     id: '015_retos_camara',
     run: (conn) => sembrarRetos(conn, retosCamara),
+  },
+  {
+    // Fase 5.4: 🔍 Sabotaje en el reactor (I1) y El apagón (I2)
+    id: '016_retos_impostor',
+    run: (conn) => sembrarRetos(conn, retosImpostor),
   },
 ];
 

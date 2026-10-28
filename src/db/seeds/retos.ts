@@ -521,3 +521,169 @@ def abrir(caja):
     },
   },
 ];
+
+// ---------------- 🔍 Impostor (fase 5.4) ----------------
+
+const FORMATO_LOG = `Cada línea del registro es «[hh:mm] TIPO datos…». Los tipos:
+  TRIPULACION K-117 Vega            → tarjeta y nombre de un tripulante (todos empiezan en el comedor)
+  PUERTA K-117 comedor -> hangar    → alguien pasa de una sala a otra
+  PUERTA K-311 hangar -> reactor DENEGADO → la puerta NO se abrió: no se movió
+  ENERGIA reactor 98%               → ruido
+  COMMS K-204 "voy al hangar -> luego al reactor" → mensajes de radio (ruido)
+  MANTENIMIENTO dron-3 limpieza en reactor        → los drones (dron-3) no son tripulantes
+  ALERTA SABOTAJE reactor           → el crimen: en esa sala, en ese momento
+La primera línea es un título (no empieza por «[»). Si hay varias líneas en el mismo minuto, cuenta su ORDEN.`;
+
+export const retosImpostor: RetoSemilla[] = [
+  {
+    titulo: '🔍 Sabotaje en el reactor',
+    categoria: 'Estructuras de Datos',
+    nivel: 'Intermedio',
+    puntos: 200,
+    descripcion: `Han saboteado la estación Hiperión y solo tienes el registro del sistema: más de mil líneas donde pasa de todo.
+Escribe investigar(log). log es el registro ENTERO como un único texto. Devuelve el NOMBRE (por ejemplo "Vega") del único tripulante que estaba en la sala del sabotaje en el momento de la alerta.
+
+${FORMATO_LOG}
+
+Pistas: log.splitlines() te da las líneas y linea.split() los trozos de cada una. Un diccionario tarjeta → sala te dice dónde está cada uno en cada momento.
+En la pestaña 📁 Expediente tienes el registro de los escenarios visibles para investigarlo a mano con los filtros.`,
+    codigoBase: `def investigar(log):
+    for linea in log.splitlines():
+        partes = linea.split()
+
+        # Tu código aquí
+
+    return "nadie"  # el NOMBRE del culpable
+`,
+    resultadoEsperado: 'Señalar al culpable en los 8 casos (2 visibles y 6 ocultos), sin caer en las trampas del registro.',
+    solucion: `def investigar(log):
+    nombres, sala_de = {}, {}
+    for linea in log.splitlines():
+        if not linea.startswith("["):
+            continue
+        partes = linea.split()
+        tipo = partes[1]
+        if tipo == "TRIPULACION":
+            nombres[partes[2]] = partes[3]
+            sala_de[partes[2]] = "comedor"
+        elif tipo == "PUERTA" and partes[2] in nombres and partes[-1] != "DENEGADO":
+            sala_de[partes[2]] = partes[5]
+        elif tipo == "ALERTA" and partes[2] == "SABOTAJE":
+            return [nombres[t] for t, s in sala_de.items() if s == partes[3]][0]
+`,
+    config: {
+      mision: 'impostor',
+      formato: 'impostor',
+      escenarios: [
+        { nombre: 'Primer turno', semilla: 431, params: { variante: 'reactor', trampas: ['denegado'] } },
+        { nombre: 'Turno de noche', semilla: 432, params: { variante: 'reactor' } },
+        { semilla: 9431, params: { variante: 'reactor' }, oculto: true },
+        { semilla: 9432, params: { variante: 'reactor' }, oculto: true },
+        { semilla: 9433, params: { variante: 'reactor', duracion: 120 }, oculto: true },
+        { semilla: 9434, params: { variante: 'reactor', duracion: 180 }, oculto: true },
+        { semilla: 9435, params: { variante: 'reactor' }, oculto: true },
+        { semilla: 9436, params: { variante: 'reactor', duracion: 200 }, oculto: true },
+      ],
+    },
+  },
+  {
+    titulo: '🔍 El apagón',
+    categoria: 'Grafos y Árboles',
+    nivel: 'Difícil',
+    puntos: 300,
+    descripcion: `El impostor ha aprendido: justo antes del sabotaje APAGA el registro de puertas. Nadie sabe quién entró en la sala.
+Escribe investigar(log) y devuelve el NOMBRE del culpable. Además de las líneas de siempre, ahora hay:
+  ERROR registro de puertas desactivado → desde aquí no hay líneas PUERTA
+  ALERTA SABOTAJE reactor              → el crimen (durante el apagón)
+  INFO registro de puertas restaurado  → vuelve el registro
+  RECUENTO K-117 comedor               → dónde está cada tripulante al volver
+
+${FORMATO_LOG}
+
+Lo que sabes:
+- Dónde estaba cada uno al apagarse el registro (reconstrúyelo como en «Sabotaje en el reactor»).
+- Dónde estaba al volver (RECUENTO).
+- Cómo es la estación: NO te la damos. Cada PUERTA a -> b (también las DENEGADO: la puerta existe) significa que a y b están unidas por un pasillo.
+- Cruzar un pasillo cuesta 2 minutos.
+
+El culpable es el ÚNICO que pudo ir desde donde estaba a la sala del crimen y llegar a tiempo, y después volver a donde apareció en el RECUENTO también a tiempo.
+Pista: la distancia entre dos salas es el mínimo número de pasillos; calcúlala con un recorrido en anchura (BFS) desde la sala del crimen. Las horas «hh:mm» pásalas a minutos.`,
+    codigoBase: `from collections import deque
+
+
+def investigar(log):
+    mapa = {}  # sala → conjunto de salas vecinas
+    for linea in log.splitlines():
+        partes = linea.split()
+
+        # Tu código aquí
+
+    return "nadie"  # el NOMBRE del culpable
+`,
+    resultadoEsperado: 'Señalar al culpable en los 8 apagones (2 visibles y 6 ocultos).',
+    solucion: `from collections import deque
+
+
+def minutos(marca):
+    hh, mm = marca.strip("[]").split(":")
+    return int(hh) * 60 + int(mm)
+
+
+def distancias(mapa, origen):
+    dist = {origen: 0}
+    cola = deque([origen])
+    while cola:
+        sala = cola.popleft()
+        for vecina in mapa[sala]:
+            if vecina not in dist:
+                dist[vecina] = dist[sala] + 1
+                cola.append(vecina)
+    return dist
+
+
+def investigar(log):
+    nombres, sala_de, despues, mapa = {}, {}, {}, {}
+    for linea in log.splitlines():
+        if not linea.startswith("["):
+            continue
+        partes = linea.split()
+        tipo = partes[1]
+        if tipo == "TRIPULACION":
+            nombres[partes[2]] = partes[3]
+            sala_de[partes[2]] = "comedor"
+        elif tipo == "PUERTA":
+            a, b = partes[3], partes[5]
+            mapa.setdefault(a, set()).add(b)
+            mapa.setdefault(b, set()).add(a)
+            if partes[2] in nombres and partes[-1] != "DENEGADO":
+                sala_de[partes[2]] = b
+        elif tipo == "ERROR":
+            apagado = minutos(partes[0])
+            antes = dict(sala_de)
+        elif tipo == "ALERTA":
+            crimen, sala = minutos(partes[0]), partes[3]
+        elif tipo == "INFO":
+            restaurado = minutos(partes[0])
+        elif tipo == "RECUENTO":
+            despues[partes[2]] = partes[3]
+    dist = distancias(mapa, sala)
+    for tarjeta, nombre in nombres.items():
+        if 2 * dist[antes[tarjeta]] <= crimen - apagado and 2 * dist[despues[tarjeta]] <= restaurado - crimen:
+            return nombre
+`,
+    config: {
+      mision: 'impostor',
+      formato: 'impostor',
+      escenarios: [
+        { nombre: 'Primer apagón', semilla: 441, params: { variante: 'apagon', trampas: ['justo'] } },
+        { nombre: 'Apagón en la guardia', semilla: 442, params: { variante: 'apagon' } },
+        { semilla: 9441, params: { variante: 'apagon' }, oculto: true },
+        { semilla: 9442, params: { variante: 'apagon' }, oculto: true },
+        { semilla: 9443, params: { variante: 'apagon', duracion: 120 }, oculto: true },
+        { semilla: 9444, params: { variante: 'apagon', duracion: 180 }, oculto: true },
+        { semilla: 9445, params: { variante: 'apagon' }, oculto: true },
+        { semilla: 9446, params: { variante: 'apagon', duracion: 200 }, oculto: true },
+      ],
+    },
+  },
+];
