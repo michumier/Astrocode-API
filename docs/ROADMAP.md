@@ -357,10 +357,10 @@ El diseño completo (requisitos, ejecución, frontales, riesgos y pruebas) está
 - [ ] 5.0 Motor de retos (E1–E5), `tipo='reto'`, `VistaReto` (M)
 - [ ] 5.1 💣 Bomba: B1, B2 (M)
 - [ ] 5.2 👽 Lengua alienígena: L1, L2, L3 (M)
-- [ ] 5.3 🔐 Cámara acorazada: C1, C2 (S–M)
+- [ ] 5.3 🔐 Cámara acorazada: C1, C2, C3 (M)
 - [ ] 5.4 🔍 Impostor: I1, I2 (M)
 - [ ] 5.5 🎨 Nebulosa: N1, N2 (S)
-- [ ] 5.6 🎵 Radio: R1, R2 (S–M)
+- [ ] 5.6 🎵 Radio: R1, R2, R3 (M)
 - [ ] 5.7 🧬 Colonia: Co1 (M)
 
 ---
