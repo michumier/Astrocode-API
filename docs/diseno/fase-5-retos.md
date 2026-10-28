@@ -1027,7 +1027,7 @@ Puede explicar qué hace una regla («con nacer a partir de 1 vecina, la colonia
 | R4 | **Trampas:** leer los ocultos, adivinar o pintar a mano | Baja | Medio | Los secretos solo viven en el proceso del motor; generadores con semilla; tamaños distintos en ocultos; la probabilidad de acertar al azar es despreciable |
 | R5 | **La IA revela la solución** (sobre todo la regla de la lengua) | Media | Medio | Reglas por formato y nivel en el prompt; detector de fugas; la IA nunca ve ocultos, culpables ni secretos |
 | R6 | **Respuestas enormes** (fotogramas, casos del impostor) | Baja | Medio | Tope de 2 MB de detalle por escenario; fotogramas compactos; tabla virtualizada |
-| R7 | **Puzles imposibles o triviales** (colonia, C2) | Media | Alto | Validadores automáticos en los tests (referencia aprueba, reglas tontas fallan, tasa de reglas aleatorias que aprueban). Para C2 ya está verificado (máximo 9 de 10) |
+| R7 | **Puzles imposibles o triviales** (colonia, C3) | Media | Alto | Validadores automáticos en los tests (referencia aprueba, reglas tontas fallan, tasa de reglas aleatorias que aprueban). Para C3 ya está verificado (máximo 9 de 10) |
 | R8 | **Determinismo:** la misma semilla debe dar lo mismo siempre | Baja | Alto | `random.Random(semilla)` propio por escenario; la versión de Python está fijada en el Dockerfile (3.12); test «misma semilla ⇒ mismo material» |
 | R9 | **Audio y móviles** (autoplay en iOS, rendimiento del canvas) | Media | Bajo | Audio solo tras clic; pistas visuales equivalentes; prueba con el emulador móvil en cada subfase |
 | R10 | **Alcance:** 7 formatos son mucho trabajo | Alta | Medio | Subfases independientes con su PR; cada una se puede usar por separado; [D] y [O] fuera de la v1 |
