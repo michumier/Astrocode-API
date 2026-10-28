@@ -378,7 +378,7 @@ Llevar la web «a otro nivel» sin tocar lo que la identifica: **el sistema sola
 - **Herramientas:** el trabajo se apoya en las skills de diseño Impeccable y de Emil Kowalski (instaladas solo en el proyecto web).
 
 ### Tareas
-- [ ] 6.0 Base: tokens de color y tipografía, fuentes servidas por la propia web, estilos globales (selección, foco, barras de desplazamiento) y kit de componentes (botón, etiqueta, panel, campo, aviso, iconos, barra superior, constelación) (M)
+- [x] 6.0 Base: tokens de color y tipografía, fuentes servidas por la propia web, estilos globales (selección, foco, barras de desplazamiento) y kit de componentes (botón, etiqueta, panel, campo, aviso, iconos, barra superior, constelación) (M) — pruebas en `docs/pruebas/fase-6.0.md`
 - [ ] 6.1 Mapa: el sistema solar con los planetas repartidos y las etiquetas derechas, la constelación del planeta en curso, el reto diario, el ranking sin correos, «Sigue donde lo dejaste» y el panel lateral del planeta (M)
 - [ ] 6.2 Ejercicio: enunciado con Markdown, una sola acción principal, salida con las pruebas, AstroTutor; caja negra y sabotaje con los nuevos estilos (M)
 - [ ] 6.3 Retos y misiones: el marco de `VistaReto` y del visor de misiones con el nuevo sistema; los visores de cada formato se mantienen y se ajustan los colores (M)
