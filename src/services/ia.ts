@@ -75,6 +75,13 @@ const NIVELES_PISTA: Record<number, string> = {
   3: 'Da una pista MUY CONCRETA: señala la línea o la expresión exacta a cambiar y por qué, con como mucho una línea de código de ejemplo que NO sea la solución completa.',
 };
 
+// Lengua alienígena: la regla secreta ES el reto, así que la IA la desvela muy poco a poco
+const PISTAS_LENGUA: Record<number, string> = {
+  1: 'NO nombres ni describas la regla. Solo haz preguntas que le ayuden a observar los ejemplos (qué cambia y qué se queda igual, si cambia cuántas celdas hay de cada color, si importa la posición...).',
+  2: 'NO describas la regla. Puedes nombrar el concepto en el que fijarse (simetría, columnas, regiones conectadas...) y relacionarlo con su código.',
+  3: 'Puedes describir la regla con palabras, pero no le escribas el código.',
+};
+
 export async function generarPista(datos: {
   titulo: string;
   enunciado: string;
@@ -121,7 +128,8 @@ ${datos.sabotaje ? `MISIÓN DE SABOTAJE: el código era correcto y un saboteador
 ` : ''}
 ${datos.mision ? `MISIÓN DE PILOTAJE (${datos.mision}): el alumno escribe piloto(sensores), que la simulación llama en cada tick; hay varias estrategias válidas. Ayúdale a razonar sobre los sensores y la decisión de cada tick, no le des la estrategia hecha.
 ` : ''}${datos.reto ? `RETO (${datos.reto}): el alumno escribe la función que pide el enunciado y se comprueba con varios escenarios, muchos ocultos. Ayúdale a entender el enunciado y a encontrar qué caso no está cubriendo; no le des el código ni el resultado de ningún escenario.
-` : ''}
+${datos.reto === 'lengua' ? `En este reto DESCUBRIR LA REGLA es el ejercicio: ${PISTAS_LENGUA[datos.nivel] || PISTAS_LENGUA[1]}
+` : ''}` : ''}
 Dame la pista de nivel ${datos.nivel}.`;
 
   const mensajes: Mensaje[] = [{ role: 'system', content: sistema }, { role: 'user', content: usuario }];

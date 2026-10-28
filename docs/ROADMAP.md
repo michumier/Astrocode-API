@@ -356,7 +356,7 @@ El diseño completo (requisitos, ejecución, frontales, riesgos y pruebas) está
 ### Tareas
 - [x] 5.0 Motor de retos (E1–E5), `tipo='reto'`, `VistaReto` (M) — pruebas en `docs/pruebas/fase-5.0.md`
 - [x] 5.1 💣 Bomba: B1, B2 (M) — pruebas en `docs/pruebas/fase-5.1.md`
-- [ ] 5.2 👽 Lengua alienígena: L1, L2, L3 (M)
+- [x] 5.2 👽 Lengua alienígena: L1, L2, L3 (M) — pruebas en `docs/pruebas/fase-5.2.md`
 - [ ] 5.3 🔐 Cámara acorazada: C1, C2, C3 (M)
 - [ ] 5.4 🔍 Impostor: I1, I2 (M)
 - [ ] 5.5 🎨 Nebulosa: N1, N2 (S)

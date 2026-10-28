@@ -32,7 +32,7 @@ jobs:
         run: >
           docker run --rm --read-only --tmpfs /tmp --cap-drop ALL
           -v "$PWD/python-runner:/src:ro" -w /src -e PYTHONDONTWRITEBYTECODE=1
-          astrocode-python-runner python -X dev -m unittest -v test_motor test_trazador test_retos_motor test_bomba
+          astrocode-python-runner python -X dev -m unittest -v test_motor test_trazador test_retos_motor test_bomba test_lengua
       - name: El runner aísla el código del alumno
         run: |
           docker run -d --name runner --read-only --tmpfs /tmp --cap-drop ALL -p 5000:5000 astrocode-python-runner

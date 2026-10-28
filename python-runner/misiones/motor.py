@@ -23,8 +23,9 @@ from .asteroides import Asteroides
 from .cristales import Cristales
 from .diagnostico import Diagnostico
 from .bomba import Bomba
+from .lengua import Lengua
 
-MISIONES = {m.id: m for m in (Aterrizaje, Asteroides, Cristales, Diagnostico, Bomba)}
+MISIONES = {m.id: m for m in (Aterrizaje, Asteroides, Cristales, Diagnostico, Bomba, Lengua)}
 
 HARNESS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'piloto_harness.py')
 

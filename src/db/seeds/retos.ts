@@ -214,3 +214,132 @@ def desactivar(bomba):
     },
   },
 ];
+
+
+// ---------------- 👽 Lengua alienígena (fase 5.2) ----------------
+// Las reglas NO se cuentan en el enunciado: se descubren con los ejemplos (escenarios visibles)
+
+const PALETA = `Colores (un número por celda): 0 negro (vacío) · 1 azul · 2 rojo · 3 verde · 4 amarillo
+5 gris · 6 morado · 7 naranja · 8 cian · 9 granate`;
+
+const CODIGO_LENGUA = `def transformar(rejilla):
+    # rejilla: lista de filas; cada fila, una lista de colores (0-9)
+    filas = len(rejilla)
+    columnas = len(rejilla[0])
+
+    # Tu código aquí: devuelve la rejilla transformada
+
+    return rejilla
+`;
+
+const enunciadoLengua = (historia: string) => `${historia}
+
+Nadie te dice la regla: estúdiala en la pestaña 🛸 Ejemplos (cada ejemplo es una rejilla de entrada y lo que responden los alienígenas) y programa transformar(rejilla), que devuelva la rejilla transformada.
+Después se comprueba con rejillas que no has visto (de otros tamaños), así que la regla tiene que valer para cualquiera.
+
+${PALETA}`;
+
+export const retosLengua: RetoSemilla[] = [
+  {
+    titulo: '👽 El espejo',
+    categoria: 'Arrays y Listas',
+    nivel: 'Fácil',
+    puntos: 150,
+    descripcion: enunciadoLengua('Los habitantes de Espéculo escriben sus mensajes en rejillas de colores… y lo ven todo un poco al revés.'),
+    codigoBase: CODIGO_LENGUA,
+    resultadoEsperado: 'Transformar bien las 3 rejillas de ejemplo y las 6 ocultas.',
+    solucion: `def transformar(rejilla):
+    return [fila[::-1] for fila in rejilla]
+`,
+    config: {
+      mision: 'lengua',
+      formato: 'lengua',
+      escenarios: [
+        { nombre: 'Ejemplo 1', semilla: 301, params: { variante: 'espejo', filas: 3, columnas: 4 } },
+        { nombre: 'Ejemplo 2', semilla: 302, params: { variante: 'espejo', filas: 4, columnas: 5 } },
+        { nombre: 'Ejemplo 3', semilla: 303, params: { variante: 'espejo', filas: 5, columnas: 3 } },
+        { semilla: 9301, params: { variante: 'espejo', filas: 1, columnas: 7 }, oculto: true },
+        { semilla: 9302, params: { variante: 'espejo', filas: 6, columnas: 1 }, oculto: true },
+        { semilla: 9303, params: { variante: 'espejo', filas: 8, columnas: 8 }, oculto: true },
+        { semilla: 9304, params: { variante: 'espejo', filas: 2, columnas: 10 }, oculto: true },
+        { semilla: 9305, params: { variante: 'espejo', filas: 10, columnas: 3 }, oculto: true },
+        { semilla: 9306, params: { variante: 'espejo' }, oculto: true },
+      ],
+    },
+  },
+  {
+    titulo: '👽 La gravedad',
+    categoria: 'Arrays y Listas',
+    nivel: 'Intermedio',
+    puntos: 200,
+    descripcion: enunciadoLengua('En Pesadia la gravedad es tan fuerte que a los alienígenas les cuesta hasta levantarse por la mañana.'),
+    codigoBase: CODIGO_LENGUA,
+    resultadoEsperado: 'Transformar bien las 3 rejillas de ejemplo y las 6 ocultas.',
+    solucion: `def transformar(rejilla):
+    filas, columnas = len(rejilla), len(rejilla[0])
+    salida = [[0] * columnas for _ in range(filas)]
+    for c in range(columnas):
+        colores = [rejilla[f][c] for f in range(filas) if rejilla[f][c] != 0]
+        for i, color in enumerate(colores):
+            salida[filas - len(colores) + i][c] = color
+    return salida
+`,
+    config: {
+      mision: 'lengua',
+      formato: 'lengua',
+      escenarios: [
+        { nombre: 'Ejemplo 1', semilla: 311, params: { variante: 'gravedad', filas: 4, columnas: 4, trampa: true } },
+        { nombre: 'Ejemplo 2', semilla: 312, params: { variante: 'gravedad', filas: 5, columnas: 6, trampa: true } },
+        { nombre: 'Ejemplo 3', semilla: 313, params: { variante: 'gravedad', filas: 6, columnas: 3, trampa: true } },
+        { semilla: 9311, params: { variante: 'gravedad', filas: 1, columnas: 6 }, oculto: true },
+        { semilla: 9312, params: { variante: 'gravedad', filas: 8, columnas: 1, trampa: true }, oculto: true },
+        { semilla: 9313, params: { variante: 'gravedad', filas: 10, columnas: 10, trampa: true }, oculto: true },
+        { semilla: 9314, params: { variante: 'gravedad', filas: 3, columnas: 9 }, oculto: true },
+        { semilla: 9315, params: { variante: 'gravedad', filas: 7, columnas: 5, trampa: true }, oculto: true },
+        { semilla: 9316, params: { variante: 'gravedad', trampa: true }, oculto: true },
+      ],
+    },
+  },
+  {
+    titulo: '👽 Los lagos',
+    categoria: 'Grafos y Árboles',
+    nivel: 'Difícil',
+    puntos: 300,
+    descripcion: enunciadoLengua(`Talasa es un planeta océano: el mar rodea cualquier rejilla por todos los lados. Los alienígenas levantan muros grises… y les gusta pintar de un color especial el agua que queda dentro.
+Pista: el agua del mar solo se mueve arriba, abajo, izquierda y derecha, nunca en diagonal.`),
+    codigoBase: CODIGO_LENGUA,
+    resultadoEsperado: 'Transformar bien las 3 rejillas de ejemplo y las 6 ocultas.',
+    solucion: `def transformar(rejilla):
+    filas, columnas = len(rejilla), len(rejilla[0])
+    mojadas = set()
+    pendientes = [(f, c) for f in range(filas) for c in range(columnas)
+                  if (f in (0, filas - 1) or c in (0, columnas - 1)) and rejilla[f][c] == 0]
+    while pendientes:
+        f, c = pendientes.pop()
+        if (f, c) in mojadas:
+            continue
+        mojadas.add((f, c))
+        for df, dc in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            nf, nc = f + df, c + dc
+            if 0 <= nf < filas and 0 <= nc < columnas and rejilla[nf][nc] == 0:
+                pendientes.append((nf, nc))
+    return [[1 if v == 0 and (f, c) not in mojadas else v for c, v in enumerate(fila)]
+            for f, fila in enumerate(rejilla)]
+`,
+    config: {
+      mision: 'lengua',
+      formato: 'lengua',
+      escenarios: [
+        { nombre: 'Ejemplo 1', semilla: 321, params: { variante: 'lagos', filas: 7, columnas: 7, hueco: false } },
+        { nombre: 'Ejemplo 2', semilla: 322, params: { variante: 'lagos', filas: 8, columnas: 9 } },
+        { nombre: 'Ejemplo 3', semilla: 323, params: { variante: 'lagos', filas: 8, columnas: 8, diagonal: true } },
+        { semilla: 9321, params: { variante: 'lagos', filas: 6, columnas: 12 }, oculto: true },
+        { semilla: 9322, params: { variante: 'lagos', filas: 12, columnas: 12, diagonal: true }, oculto: true },
+        { semilla: 9323, params: { variante: 'lagos', filas: 10, columnas: 7, hueco: false }, oculto: true },
+        { semilla: 9324, params: { variante: 'lagos', filas: 9, columnas: 11 }, oculto: true },
+        { semilla: 9325, params: { variante: 'lagos', filas: 12, columnas: 8, diagonal: true }, oculto: true },
+        { semilla: 9326, params: { variante: 'lagos' }, oculto: true },
+      ],
+    },
+  },
+];
