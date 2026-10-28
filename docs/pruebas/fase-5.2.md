@@ -64,3 +64,14 @@ docker compose -p astrocode-prueba -f docker-compose.yml -f test/e2e/compose.e2e
 ## 4. Fuera de alcance
 - L4 (el objeto más grande) queda como [D]. El plan B de L3 («El mensaje cifrado») no hace falta de momento.
 - Animación «🌊 Ver entrar el agua» tras aprobar los lagos: [D].
+
+## 5. Ajustes tras la revisión (28-oct-2026)
+
+| Qué | Cambio | Comprobación |
+|---|---|---|
+| Pila de desarrollo real | Al cambiar de rama, la API (nodemon) aplicó las migraciones 013 y 014 en la BD real con el runner viejo. Se reconstruyó el runner y se paró la pila: desde ahora se para antes de desarrollar | El runner real conoce las 6 misiones y retos |
+| Prueba de rendimiento en CI | Umbral del lote de 48×48 de 1 s a 3 s (en local tarda ~0,15 s) | `test_retos_motor` |
+| Runner | gunicorn pasa a 4 procesos × 4 hilos | Suite Python y e2e en verde |
+| CSS global | Las clases que chocaban entre páginas (`exercise-info`, `exercise-title`, `stat-*`, `back-btn`, `points-label`, `rank`, `score`, `username`) quedan dentro de la raíz de su vista. El ranking usaba clases distintas a las de su CSS: la puntuación vuelve a verse grande con «pts» debajo | Navegador: ranking, perfil y dashboard con sus estilos |
+| Borradores | Se guardan con una firma de la tarea (título + código base): si con el mismo id aparece otra tarea, el borrador viejo se ignora. Los borradores antiguos sin firma se descartan una vez | `tsc` y navegador |
+| **Pistas IA en los retos (con NVIDIA real)** | Con 24 pistas reales: la gravedad y los lagos revelaban la regla en el nivel 2, en el nivel 3 se dictaba código (`[::-1]`, el algoritmo de la gravedad, la expresión del último azul) y algunas pistas del nivel 1 salían cortadas. Cambios: <br>• en los retos la IA nunca recibe el código de la solución (en la lengua recibe la regla en palabras desde el nivel 2) <br>• prohibido escribir código en los retos <br>• detector `revelaReglaLengua` con un reintento y una pista segura <br>• recorte a la última frase completa <br>• reintentos ante 503/429 de NVIDIA | Unitarias 8/8 (3 nuevas). Tercera ronda de 18 pistas reales: ninguna revela la regla en los niveles 1-2, ninguna da código, ninguna cortada y 0 errores (antes, 3 de 18 fallaban con 503) |

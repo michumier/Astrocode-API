@@ -94,7 +94,8 @@ class PruebasRetosMotor(unittest.TestCase):
         self.assertEqual(r['metricas'], {'aciertos': 48 * 48, 'total': 48 * 48})
         self.assertEqual(len(r['fotogramas'][-1]['imagen']), 48 * 48)
         print(f'\n  rendimiento: lote de 48×48 = {48 * 48} llamadas en {segundos:.2f} s')
-        self.assertLess(segundos, 1.0)
+        # En CI (máquinas más lentas y compartidas) se deja margen: en local tarda ~0,15 s
+        self.assertLess(segundos, 3.0)
 
     def test_error_en_un_lote_dice_con_que_argumentos(self):
         r = ejecutar_escenario(REJILLA_ROTA, 'diagnostico', escenario('lote', lado=8), con_detalle=False)
