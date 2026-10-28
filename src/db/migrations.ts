@@ -2,6 +2,7 @@ import { PoolConnection } from 'mysql2/promise';
 import { pool } from '../config/db';
 import { testsRetosDiarios } from './seeds/retosDiarios';
 import { misionesIniciales } from './seeds/misiones';
+import { retosBomba, RetoSemilla } from './seeds/retos';
 
 /*
  * Migraciones de la base de datos.
@@ -167,7 +168,32 @@ const migraciones: Migracion[] = [
       }
     },
   },
+  {
+    // Fase 5.1: 💣 Bomba de cables (B1) y Bomba de módulos (B2)
+    id: '013_retos_bomba',
+    run: (conn) => sembrarRetos(conn, retosBomba),
+  },
 ];
+
+// Siembra retos de la fase 5 (idempotente: no repite los que ya existen por título)
+async function sembrarRetos(conn: any, retos: RetoSemilla[]) {
+  for (const r of retos) {
+    const [existe] = await conn.query("SELECT id FROM tareas WHERE titulo = ? AND tipo = 'reto'", [r.titulo]) as any[];
+    if ((existe as any[]).length) continue;
+    const [cat] = await conn.query('SELECT id FROM categorias WHERE nombre = ?', [r.categoria]) as any[];
+    const [niv] = await conn.query('SELECT id FROM niveles WHERE nombre = ?', [r.nivel]) as any[];
+    if (!(cat as any[]).length || !(niv as any[]).length) {
+      console.warn(`Reto «${r.titulo}» omitido: no existe la categoría o el nivel`);
+      continue;
+    }
+    await conn.query(
+      `INSERT INTO tareas (categoria_id, nivel_id, titulo, descripcion, codigo_base, resultado_esperado, solucion, puntos_base, tipo, config)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'reto', ?)`,
+      [(cat as any[])[0].id, (niv as any[])[0].id, r.titulo, r.descripcion, r.codigoBase, r.resultadoEsperado,
+       r.solucion, r.puntos, JSON.stringify(r.config)]
+    );
+  }
+}
 
 // Retos de calibración del motor (fase 5.0). Solo con RETOS_DE_PRUEBA=1 (pruebas e2e y desarrollo):
 // no son ejercicios para alumnos, sirven para probar argumentos, lotes y consultas de punta a punta.
