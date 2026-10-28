@@ -24,8 +24,9 @@ from .cristales import Cristales
 from .diagnostico import Diagnostico
 from .bomba import Bomba
 from .lengua import Lengua
+from .camara import Camara
 
-MISIONES = {m.id: m for m in (Aterrizaje, Asteroides, Cristales, Diagnostico, Bomba, Lengua)}
+MISIONES = {m.id: m for m in (Aterrizaje, Asteroides, Cristales, Diagnostico, Bomba, Lengua, Camara)}
 
 HARNESS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'piloto_harness.py')
 
@@ -197,6 +198,11 @@ def ejecutar_escenario(codigo, mision_id, escenario, con_detalle):
     fin_propio = mision.terminado()
     if error:
         mision.terminar(False, error)
+    # Si el escenario se cortó a medias (error, alarma…), el visor necesita el último estado igualmente
+    if con_detalle:
+        ultimo = mision.fotograma()
+        if ultimo != fotogramas[-1]:
+            fotogramas.append(ultimo)
     resultado = mision.resultado()
     resultado['error_codigo'] = bool(error) and not fin_propio
     if con_detalle:

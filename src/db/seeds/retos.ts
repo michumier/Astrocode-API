@@ -343,3 +343,181 @@ Pista: el agua del mar solo se mueve arriba, abajo, izquierda y derecha, nunca e
     },
   },
 ];
+
+
+// ---------------- 🔐 Cámara acorazada (fase 5.3) ----------------
+// Tres cámaras del banco de Ceres, cada una mejor protegida: fuerza bruta → búsqueda binaria → deducción
+
+export const retosCamara: RetoSemilla[] = [
+  {
+    titulo: '🔐 La huella del PIN',
+    categoria: 'Bucles',
+    nivel: 'Fácil',
+    puntos: 150,
+    descripcion: `El banco de Ceres no guarda los PIN de sus cámaras: guarda su HUELLA.
+Una huella (hash SHA-256) es un texto de 64 caracteres que sale de pasar el PIN por una función: el mismo PIN da siempre la misma huella, pero de la huella NO se puede volver al PIN. La única forma de encontrarlo es probar PINs hasta dar con uno cuya huella coincida: eso es la FUERZA BRUTA.
+
+Esta primera cámara no tiene alarma: puedes probar todo lo que quieras.
+
+Escribe abrir(caja), que devuelva el PIN (como texto). Recibes un diccionario:
+- huella: la huella del PIN
+- candidatos: una lista de PINs sospechosos que consiguió un espía… o None si no consiguió nada
+- cifras: cuántas cifras tiene el PIN
+
+Si no hay candidatos, tendrás que probar TODOS los PIN posibles (0000, 0001, …). Ojo: el PIN 7 de 4 cifras es "0007", no "7".
+La función huella(texto) ya está en el código.`,
+    codigoBase: `import hashlib
+
+
+def huella(texto):
+    return hashlib.sha256(texto.encode()).hexdigest()
+
+
+def abrir(caja):
+    objetivo = caja["huella"]
+
+    # Tu código aquí: prueba PINs hasta que huella(pin) == objetivo
+
+    return "0000"
+`,
+    resultadoEsperado: 'Abrir las 8 cámaras (2 visibles y 6 ocultas), con y sin lista de candidatos.',
+    solucion: `import hashlib
+
+
+def huella(texto):
+    return hashlib.sha256(texto.encode()).hexdigest()
+
+
+def abrir(caja):
+    candidatos = caja["candidatos"]
+    if candidatos is None:
+        cifras = caja["cifras"]
+        candidatos = [str(n).zfill(cifras) for n in range(10 ** cifras)]
+    for pin in candidatos:
+        if huella(pin) == caja["huella"]:
+            return pin
+`,
+    config: {
+      mision: 'camara',
+      formato: 'camara',
+      escenarios: [
+        { nombre: 'La lista del espía', semilla: 401, params: { variante: 'huella', candidatos: 500 } },
+        { nombre: 'Sin pistas', semilla: 402, params: { variante: 'huella' } },
+        { semilla: 9401, params: { variante: 'huella', candidatos: 50, posicion: 'inicio' }, oculto: true },
+        { semilla: 9402, params: { variante: 'huella', candidatos: 2000, posicion: 'fin' }, oculto: true },
+        { semilla: 9403, params: { variante: 'huella', pin: '0000' }, oculto: true },
+        { semilla: 9404, params: { variante: 'huella', pin: '9999' }, oculto: true },
+        { semilla: 9405, params: { variante: 'huella', cifras: 5 }, oculto: true },
+        { semilla: 9406, params: { variante: 'huella', candidatos: 300, repetido: true }, oculto: true },
+      ],
+    },
+  },
+  {
+    titulo: '🔐 La cámara de Ceres',
+    categoria: 'Algoritmos de Búsqueda',
+    nivel: 'Intermedio',
+    puntos: 200,
+    descripcion: `La segunda cámara es más lista: tiene ALARMA. Aquí probar uno a uno no te da tiempo.
+Escribe abrir(caja). La caja tiene:
+- caja.minimo y caja.maximo: el código secreto está entre ellos (ambos incluidos)
+- caja.intentos: cuántos intentos tienes antes de que salte la alarma
+- caja.probar(n): prueba el número n y responde
+    "mayor"   → el código es MAYOR que n
+    "menor"   → el código es MENOR que n
+    "abierta" → ¡acertaste!
+
+Con un millón de números solo tienes 20 intentos. Piensa: ¿qué número probarías primero para descartar lo máximo posible?
+Si se te acaban los intentos, salta la alarma (la excepción Alarma) y la misión falla.`,
+    codigoBase: `def abrir(caja):
+    # caja.minimo, caja.maximo, caja.intentos
+    respuesta = caja.probar(caja.minimo)
+
+    # Tu código aquí
+
+`,
+    resultadoEsperado: 'Abrir las 8 cámaras (2 visibles y 6 ocultas) sin que salte la alarma.',
+    solucion: `def abrir(caja):
+    bajo, alto = caja.minimo, caja.maximo
+    while bajo <= alto:
+        medio = (bajo + alto) // 2
+        r = caja.probar(medio)
+        if r == "abierta":
+            return medio
+        if r == "mayor":
+            bajo = medio + 1
+        else:
+            alto = medio - 1
+`,
+    config: {
+      mision: 'camara',
+      formato: 'camara',
+      escenarios: [
+        { nombre: 'Cámara pequeña (1–1.000)', semilla: 411, params: { variante: 'binaria', maximo: 1000, secreto: 731 } },
+        { nombre: 'Cámara grande (1–1.000.000)', semilla: 412, params: { variante: 'binaria', maximo: 1000000 } },
+        { semilla: 9411, params: { variante: 'binaria', maximo: 1000, secreto: 1 }, oculto: true },
+        { semilla: 9412, params: { variante: 'binaria', maximo: 1000000, secreto: 1000000 }, oculto: true },
+        { semilla: 9413, params: { variante: 'binaria', maximo: 1000000, secreto: 500000 }, oculto: true },
+        { semilla: 9414, params: { variante: 'binaria', maximo: 1000000000 }, oculto: true },
+        { semilla: 9415, params: { variante: 'binaria', maximo: 1000000, secreto: 987654 }, oculto: true },
+        { semilla: 9416, params: { variante: 'binaria', maximo: 2 }, oculto: true },
+      ],
+    },
+  },
+  {
+    titulo: '🔐 La cerradura de combinación',
+    categoria: 'Optimización',
+    nivel: 'Difícil',
+    puntos: 300,
+    descripcion: `La última cámara solo te da pistas a medias. La combinación son 4 cifras DISTINTAS (por ejemplo "4271") y tienes 10 intentos.
+Escribe abrir(caja). caja.probar("0123") responde:
+- "abierta" si aciertas, o
+- {"exactos": e, "descolocados": d}
+    exactos: cifras correctas EN SU SITIO
+    descolocados: cifras que están en la combinación pero en OTRO sitio
+
+Ejemplo: si el secreto es "4271" y pruebas "0123" → {"exactos": 0, "descolocados": 2} (el 1 y el 2 están, pero no en ese sitio).
+
+Probar al azar no llega. Pista: cada respuesta te dice mucho de qué combinaciones YA NO pueden ser…
+⭐⭐⭐ si la abres en 7 intentos o menos en todas las cámaras, ⭐⭐ en 8 y ⭐ en 9 o 10.`,
+    codigoBase: `def abrir(caja):
+    # caja.cifras (4), caja.intentos (10)
+    respuesta = caja.probar("0123")
+
+    # Tu código aquí
+
+`,
+    resultadoEsperado: 'Abrir las 8 cerraduras (2 visibles y 6 ocultas) en 10 intentos como máximo.',
+    solucion: `from itertools import permutations
+
+
+def comparar(intento, secreto):
+    exactos = sum(a == b for a, b in zip(intento, secreto))
+    comunes = len(set(intento) & set(secreto))
+    return {"exactos": exactos, "descolocados": comunes - exactos}
+
+
+def abrir(caja):
+    posibles = ["".join(p) for p in permutations("0123456789", 4)]
+    while posibles:
+        intento = posibles[0]
+        r = caja.probar(intento)
+        if r == "abierta":
+            return intento
+        posibles = [p for p in posibles if comparar(intento, p) == r]
+`,
+    config: {
+      mision: 'camara',
+      formato: 'camara',
+      escenarios: [
+        { nombre: 'Cerradura del vestíbulo', semilla: 421, params: { variante: 'combinacion', secreto: '4271' } },
+        { nombre: 'Cerradura del sótano', semilla: 422, params: { variante: 'combinacion' } },
+        { semilla: 9421, params: { variante: 'combinacion', secreto: '9431' }, oculto: true },
+        { semilla: 9422, params: { variante: 'combinacion', secreto: '0123' }, oculto: true },
+        { semilla: 9423, params: { variante: 'combinacion', secreto: '9876' }, oculto: true },
+        { semilla: 9424, params: { variante: 'combinacion' }, oculto: true },
+        { semilla: 9425, params: { variante: 'combinacion' }, oculto: true },
+        { semilla: 9426, params: { variante: 'combinacion', secreto: '5293' }, oculto: true },
+      ],
+    },
+  },
+];
