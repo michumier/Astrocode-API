@@ -28,8 +28,9 @@ from .camara import Camara
 from .impostor import Impostor
 from .nebulosa import Nebulosa
 from .radio import Radio
+from .colonia import Colonia
 
-MISIONES = {m.id: m for m in (Aterrizaje, Asteroides, Cristales, Diagnostico, Bomba, Lengua, Camara, Impostor, Nebulosa, Radio)}
+MISIONES = {m.id: m for m in (Aterrizaje, Asteroides, Cristales, Diagnostico, Bomba, Lengua, Camara, Impostor, Nebulosa, Radio, Colonia)}
 
 HARNESS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'piloto_harness.py')
 

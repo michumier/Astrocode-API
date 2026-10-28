@@ -1000,3 +1000,53 @@ def recibir(senal):
     },
   },
 ];
+
+// ---------------- 🧬 Colonia (fase 5.7) ----------------
+
+export const retosColonia: RetoSemilla[] = [
+  {
+    titulo: '🧬 Terraformación',
+    categoria: 'Funciones',
+    nivel: 'Intermedio',
+    puntos: 200,
+    descripcion: `No controlas la colonia alienígena: escribes su LEY DE LA VIDA y la ves evolucionar sola.
+Escribe regla(viva, vecinas) y devuelve True o False:
+- viva: True si la celda está viva ahora.
+- vecinas: cuántas de sus 8 celdas de alrededor están vivas (de 0 a 8).
+- Devuelves si esa celda estará viva en la siguiente generación.
+
+El mapa es de 24×24. Las rocas están siempre muertas. Cada generación se calcula a la vez para todas las celdas con tu regla, y hay 40 generaciones.
+Objetivo: que la colonia cubra ENTERA la zona verde (todas sus celdas vivas a la vez) sin tocar NUNCA la base humana (ninguna celda de la base viva en ninguna generación).
+
+Fíjate en el mapa (pestaña 🗺️ Mapas):
+- A la zona verde se llega por una PUERTA de 2 celdas en el muro.
+- La base está tras un muro con una GRIETA de 1 sola celda.
+Piensa: una celda muerta justo al otro lado de la puerta, ¿cuántas vecinas vivas puede tener? ¿Y una al otro lado de la grieta?
+
+Tu regla tiene que ser pura: con la misma entrada, siempre la misma salida. El motor la llama con las 18 combinaciones posibles y enseña la tabla que sale.
+⭐⭐⭐ si cubres la zona en 25 generaciones o menos en todos los mapas, ⭐⭐ en 32 y ⭐ en 40.`,
+    codigoBase: `def regla(viva, vecinas):
+    # viva: True/False · vecinas: cuántas de las 8 de alrededor están vivas (0-8)
+    # Devuelve si la celda estará viva en la siguiente generación
+    return viva and vecinas >= 2
+`,
+    resultadoEsperado: 'Cubrir la zona verde en los 6 mapas (2 visibles y 4 ocultos) sin que la colonia llegue nunca a la base.',
+    solucion: `def regla(viva, vecinas):
+    # Lo que está vivo sigue vivo. Una celda nace si tiene 2 o más vecinas:
+    # con 2 se cruza la puerta, y nunca con 0 o 1, que es lo único que se ve tras la grieta
+    return viva or vecinas >= 2
+`,
+    config: {
+      mision: 'colonia',
+      formato: 'colonia',
+      escenarios: [
+        { nombre: 'Valle de Hiperión', semilla: 501 },
+        { nombre: 'Cráter del norte', semilla: 502 },
+        { semilla: 9501, oculto: true },
+        { semilla: 9502, oculto: true },
+        { semilla: 9503, oculto: true },
+        { semilla: 9504, oculto: true },
+      ],
+    },
+  },
+];

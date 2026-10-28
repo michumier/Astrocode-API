@@ -361,7 +361,7 @@ El diseño completo (requisitos, ejecución, frontales, riesgos y pruebas) está
 - [x] 5.4 🔍 Impostor: I1, I2 (M) — pruebas en `docs/pruebas/fase-5.4.md`
 - [x] 5.5 🎨 Nebulosa: N1, N2 (S) — pruebas en `docs/pruebas/fase-5.5.md`
 - [x] 5.6 🎵 Radio: R1, R2, R3 (M) — pruebas en `docs/pruebas/fase-5.6.md`
-- [ ] 5.7 🧬 Colonia: Co1 (M)
+- [x] 5.7 🧬 Colonia: Co1 (M) — pruebas en `docs/pruebas/fase-5.7.md`
 
 ---
 

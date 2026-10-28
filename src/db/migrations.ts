@@ -2,7 +2,7 @@ import { PoolConnection } from 'mysql2/promise';
 import { pool } from '../config/db';
 import { testsRetosDiarios } from './seeds/retosDiarios';
 import { misionesIniciales } from './seeds/misiones';
-import { retosBomba, retosLengua, retosCamara, retosImpostor, retosNebulosa, retosRadio, RetoSemilla } from './seeds/retos';
+import { retosBomba, retosLengua, retosCamara, retosImpostor, retosNebulosa, retosRadio, retosColonia, RetoSemilla } from './seeds/retos';
 
 /*
  * Migraciones de la base de datos.
@@ -197,6 +197,11 @@ const migraciones: Migracion[] = [
     // Fase 5.6: 🎵 SOS (R1), El transmisor morse (R2) y La señal con ruido (R3)
     id: '018_retos_radio',
     run: (conn) => sembrarRetos(conn, retosRadio),
+  },
+  {
+    // Fase 5.7: 🧬 Terraformación (Co1)
+    id: '019_retos_colonia',
+    run: (conn) => sembrarRetos(conn, retosColonia),
   },
 ];
 
