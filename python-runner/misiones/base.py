@@ -16,6 +16,12 @@ class AccionInvalida(Exception):
 class Mision:
     id = ''
     max_ticks = 1000
+    # Función que escribe el alumno (las misiones de pilotaje usan piloto(sensores))
+    funcion = 'piloto'
+    # Segundos (reloj) para responder a cada mensaje; los retos con mucho cálculo dan más margen
+    espera_respuesta = 0.5
+    # Retos en los que la función puede no devolver nada (por ejemplo, si lo importante son sus consultas)
+    admite_none = False
 
     def __init__(self, semilla, params=None):
         self.semilla = int(semilla)
@@ -39,6 +45,23 @@ class Mision:
     def escena(self):
         """Datos estáticos para dibujar (terreno, mapa...)."""
         return {}
+
+    def mensaje(self):
+        """Lo que se envía al alumno en el tick actual.
+
+        {"sensores": x} → funcion(x) · {"args": [...]} → funcion(*args)
+        {"lote": [[...], ...]} → una llamada por elemento (la acción es la lista de resultados)
+        {"remoto": {"atributos": {...}, "metodos": [...]}} → funcion(objeto) que consulta al motor
+        """
+        return {'sensores': self.sensores()}
+
+    def consultar(self, metodo, args):
+        """Respuesta a una consulta del objeto remoto: {"respuesta": x} o {"excepcion": "...", "tipo": "Alarma"}."""
+        raise AccionInvalida(f'Este reto no admite consultas ({metodo})')
+
+    def material(self):
+        """Datos públicos del escenario que el alumno ve ANTES de ejecutar (solo de los visibles)."""
+        return self.escena()
 
     def estrellas(self):
         """1-3 si se completó con éxito."""

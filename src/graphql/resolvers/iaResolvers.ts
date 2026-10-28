@@ -59,6 +59,7 @@ export const iaResolvers = {
         throw new ForbiddenError('Completa primero el ejercicio original para desbloquear este sabotaje');
       }
       const sabotaje = tarea.tipo === 'sabotaje' ? await sabotajePorTarea(tarea.id) : null;
+      const configTarea = typeof tarea.config === 'string' ? JSON.parse(tarea.config) : tarea.config;
 
       // Tests visibles, para que la IA sepa qué se espera
       const tests = await query(
@@ -76,6 +77,8 @@ export const iaResolvers = {
         nivel: Math.min(Math.max(Math.floor(nivel), 1), 3),
         sabotaje: sabotaje ? { descripcion: sabotaje.descripcion, linea: sabotaje.linea, diff: sabotaje.diff } : null,
         mision: tarea.tipo === 'pilotaje' ? (typeof tarea.config === 'string' ? JSON.parse(tarea.config) : tarea.config)?.mision : null,
+        reto: tarea.tipo === 'reto' ? configTarea?.formato || 'reto' : null,
+        variante: tarea.tipo === 'reto' ? configTarea?.escenarios?.[0]?.params?.variante ?? null : null,
       });
 
       await query('INSERT INTO pistas_ia (usuario_id, tarea_id) VALUES (?, ?)', [usuario.id, tareaId]);

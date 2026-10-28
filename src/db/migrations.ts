@@ -2,6 +2,7 @@ import { PoolConnection } from 'mysql2/promise';
 import { pool } from '../config/db';
 import { testsRetosDiarios } from './seeds/retosDiarios';
 import { misionesIniciales } from './seeds/misiones';
+import { retosBomba, retosLengua, retosCamara, retosImpostor, retosNebulosa, retosRadio, retosColonia, RetoSemilla } from './seeds/retos';
 
 /*
  * Migraciones de la base de datos.
@@ -167,7 +168,140 @@ const migraciones: Migracion[] = [
       }
     },
   },
+  {
+    // Fase 5.1: 💣 Bomba de cables (B1) y Bomba de módulos (B2)
+    id: '013_retos_bomba',
+    run: (conn) => sembrarRetos(conn, retosBomba),
+  },
+  {
+    // Fase 5.2: 👽 El espejo (L1), La gravedad (L2) y Los lagos (L3)
+    id: '014_retos_lengua',
+    run: (conn) => sembrarRetos(conn, retosLengua),
+  },
+  {
+    // Fase 5.3: 🔐 La huella del PIN (C1), La cámara de Ceres (C2) y La cerradura de combinación (C3)
+    id: '015_retos_camara',
+    run: (conn) => sembrarRetos(conn, retosCamara),
+  },
+  {
+    // Fase 5.4: 🔍 Sabotaje en el reactor (I1) y El apagón (I2)
+    id: '016_retos_impostor',
+    run: (conn) => sembrarRetos(conn, retosImpostor),
+  },
+  {
+    // Fase 5.5: 🎨 La bandera de Kepler (N1) y Los anillos de Saturno (N2)
+    id: '017_retos_nebulosa',
+    run: (conn) => sembrarRetos(conn, retosNebulosa),
+  },
+  {
+    // Fase 5.6: 🎵 SOS (R1), El transmisor morse (R2) y La señal con ruido (R3)
+    id: '018_retos_radio',
+    run: (conn) => sembrarRetos(conn, retosRadio),
+  },
+  {
+    // Fase 5.7: 🧬 Terraformación (Co1)
+    id: '019_retos_colonia',
+    run: (conn) => sembrarRetos(conn, retosColonia),
+  },
 ];
+
+// Siembra retos de la fase 5 (idempotente: no repite los que ya existen por título)
+async function sembrarRetos(conn: any, retos: RetoSemilla[]) {
+  for (const r of retos) {
+    const [existe] = await conn.query("SELECT id FROM tareas WHERE titulo = ? AND tipo = 'reto'", [r.titulo]) as any[];
+    if ((existe as any[]).length) continue;
+    const [cat] = await conn.query('SELECT id FROM categorias WHERE nombre = ?', [r.categoria]) as any[];
+    const [niv] = await conn.query('SELECT id FROM niveles WHERE nombre = ?', [r.nivel]) as any[];
+    if (!(cat as any[]).length || !(niv as any[]).length) {
+      console.warn(`Reto «${r.titulo}» omitido: no existe la categoría o el nivel`);
+      continue;
+    }
+    await conn.query(
+      `INSERT INTO tareas (categoria_id, nivel_id, titulo, descripcion, codigo_base, resultado_esperado, solucion, puntos_base, tipo, config)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'reto', ?)`,
+      [(cat as any[])[0].id, (niv as any[])[0].id, r.titulo, r.descripcion, r.codigoBase, r.resultadoEsperado,
+       r.solucion, r.puntos, JSON.stringify(r.config)]
+    );
+  }
+}
+
+// Retos de calibración del motor (fase 5.0). Solo con RETOS_DE_PRUEBA=1 (pruebas e2e y desarrollo):
+// no son ejercicios para alumnos, sirven para probar argumentos, lotes y consultas de punta a punta.
+export const retosDePrueba = [
+  {
+    titulo: '🧪 Calibración: argumentos',
+    descripcion: 'Escribe calibrar(a, b), que devuelva la suma de los dos números.',
+    codigoBase: 'def calibrar(a, b):\n    return 0\n',
+    solucion: 'def calibrar(a, b):\n    return a + b\n',
+    config: {
+      mision: 'diagnostico', formato: 'diagnostico',
+      escenarios: [
+        { nombre: 'Pareja A', semilla: 1, params: { modo: 'args' } },
+        { nombre: 'Pareja B', semilla: 2, params: { modo: 'args' } },
+        { semilla: 3, params: { modo: 'args' }, oculto: true },
+        { semilla: 4, params: { modo: 'args' }, oculto: true },
+      ],
+    },
+  },
+  {
+    titulo: '🧪 Calibración: lotes',
+    descripcion: 'Escribe calibrar(x, y), que devuelva (x + y) % 10. Se llama una vez por cada punto de la rejilla.',
+    codigoBase: 'def calibrar(x, y):\n    return 0\n',
+    solucion: 'def calibrar(x, y):\n    return (x + y) % 10\n',
+    config: {
+      mision: 'diagnostico', formato: 'diagnostico',
+      escenarios: [
+        { nombre: 'Rejilla 8×8', semilla: 1, params: { modo: 'lote', lado: 8 } },
+        { nombre: 'Rejilla 48×48', semilla: 2, params: { modo: 'lote', lado: 48 } },
+        { semilla: 3, params: { modo: 'lote', lado: 20 }, oculto: true },
+      ],
+    },
+  },
+  {
+    titulo: '🧪 Calibración: consultas',
+    descripcion: 'Escribe calibrar(sonda): acierta el número secreto con sonda.probar(n), que responde «mayor», «menor» o «abierta», antes de agotar sonda.intentos.',
+    codigoBase: 'def calibrar(sonda):\n    sonda.probar(1)\n',
+    solucion: `def calibrar(sonda):
+    bajo, alto = sonda.minimo, sonda.maximo
+    while bajo <= alto:
+        medio = (bajo + alto) // 2
+        r = sonda.probar(medio)
+        if r == "abierta":
+            return medio
+        if r == "mayor":
+            bajo = medio + 1
+        else:
+            alto = medio - 1
+`,
+    config: {
+      mision: 'diagnostico', formato: 'diagnostico',
+      escenarios: [
+        { nombre: 'Rango de mil', semilla: 1, params: { modo: 'consulta', maximo: 1000 } },
+        { nombre: 'Rango de un millón', semilla: 2, params: { modo: 'consulta', maximo: 1000000 } },
+        { semilla: 3, params: { modo: 'consulta', maximo: 1000000000 }, oculto: true },
+        { semilla: 4, params: { modo: 'consulta', maximo: 50 }, oculto: true },
+      ],
+    },
+  },
+];
+
+export async function sembrarRetosDePrueba() {
+  if (process.env.RETOS_DE_PRUEBA !== '1') return;
+  const [cat] = await pool.query("SELECT id FROM categorias WHERE nombre = 'Funciones'") as any[];
+  const [niv] = await pool.query("SELECT id FROM niveles WHERE nombre = 'Fácil'") as any[];
+  if (!(cat as any[]).length || !(niv as any[]).length) return;
+  for (const r of retosDePrueba) {
+    const [existe] = await pool.query("SELECT id FROM tareas WHERE titulo = ? AND tipo = 'reto'", [r.titulo]) as any[];
+    if ((existe as any[]).length) continue;
+    await pool.query(
+      `INSERT INTO tareas (categoria_id, nivel_id, titulo, descripcion, codigo_base, resultado_esperado, solucion, puntos_base, tipo, config)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 10, 'reto', ?)`,
+      [(cat as any[])[0].id, (niv as any[])[0].id, r.titulo, r.descripcion, r.codigoBase,
+       'Superar todos los escenarios (algunos ocultos).', r.solucion, JSON.stringify(r.config)]
+    );
+  }
+  console.log('Retos de calibración (RETOS_DE_PRUEBA=1) listos');
+}
 
 // Días que se guardan los intentos (privacidad). Se limpian al arrancar la API.
 const RETENCION_INTENTOS_DIAS = Number(process.env.RETENCION_INTENTOS_DIAS || 180);

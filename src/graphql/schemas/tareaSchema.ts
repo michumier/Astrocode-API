@@ -3,11 +3,13 @@ import gql from 'graphql-tag';
 export const tareaTypeDefs = gql`
   type Tarea {
     id: ID!
-    # codigo | sabotaje | pilotaje
+    # codigo | sabotaje | pilotaje | reto
     tipo: String!
+    # Solo en los retos (fase 5): bomba, lengua, camara... (null en el resto)
+    formato: String
     # Ambientación de los sabotajes (null en el resto)
     contexto: String
-    # Solo en misiones de pilotaje: qué misión es y sus escenarios visibles
+    # Misiones de pilotaje y retos: qué simulación es y sus escenarios visibles
     mision: InfoMision
     categoria: Categoria!
     nivel: Nivel!
@@ -146,8 +148,14 @@ export const tareaTypeDefs = gql`
   }
 
   type InfoMision {
-    # aterrizaje | asteroides | cristales
+    # aterrizaje | asteroides | cristales | (retos) bomba, lengua...
     id: String!
+    # pilotaje en las misiones; en los retos, el formato (elige el visor del cliente)
+    formato: String!
+    # Función que escribe el alumno: piloto, desactivar, transformar...
+    funcion: String!
+    # Retos: material público de cada escenario visible, en JSON ([{ nombre, material }]). Null en las misiones
+    material: String
     # Nombres de los escenarios visibles (se pueden probar uno a uno)
     escenarios: [String!]!
     ocultos: Int!

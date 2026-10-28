@@ -1,7 +1,7 @@
 import { query, transaction } from '../../config/db';
 import { corregirTarea } from '../../services/correccion';
 import { clasificarError } from '../../services/errores';
-import { corregirMision, comoEjecucion, tipoErrorMision, misionParaGraphQL, infoMision, probarEscenario } from '../../services/misiones';
+import { corregirMision, comoEjecucion, tipoErrorMision, misionParaGraphQL, infoMision, probarEscenario, esSimulacion, materialMision } from '../../services/misiones';
 import { GraphQLError } from 'graphql';
 import { UserInputError, ForbiddenError, Context, requireAuth, requireAdmin } from '../errors';
 import { puedeAbrirTarea, sabotajePorTarea, esArregloQuirurgico } from '../../services/sabotajes';
@@ -74,8 +74,9 @@ export const tareaResolvers = {
   Tarea: {
     // Las tareas antiguas o construidas a mano pueden no traer el tipo
     tipo: (parent: any) => parent.tipo || 'codigo',
-    // Misiones: id y escenarios visibles (sin semillas ni datos de los ocultos)
-    mision: (parent: any) => (parent.tipo === 'pilotaje' && parent.config ? infoMision(parent) : null),
+    // Misiones y retos: id y escenarios visibles (sin semillas ni datos de los ocultos)
+    mision: (parent: any) => (esSimulacion(parent) && parent.config ? infoMision(parent) : null),
+    formato: (parent: any) => (parent.tipo === 'reto' && parent.config ? infoMision(parent).formato : null),
     // Ambientación de los sabotajes (guardada en config)
     contexto: (parent: any) => {
       if (!parent.config) return null;
@@ -110,6 +111,11 @@ export const tareaResolvers = {
         throw new Error('Error interno del servidor');
       }
     },
+  },
+
+  InfoMision: {
+    funcion: async (parent: any) => (await materialMision(parent._tarea)).funcion,
+    material: async (parent: any) => (await materialMision(parent._tarea)).material,
   },
 
   Query: {
@@ -210,7 +216,7 @@ export const tareaResolvers = {
         const result = await query(
           `SELECT id, categoria_id, nivel_id, titulo, descripcion, fecha_vencimiento, 
                   prioridad, completado, tiempo_finalizacion_id, puntos_base, puntos_bonus,
-                  codigo_base, resultado_esperado, tipo
+                  codigo_base, resultado_esperado, tipo, config
            FROM tareas WHERE categoria_id = ? AND tipo <> 'sabotaje' 
            ORDER BY prioridad DESC, fecha_vencimiento ASC`,
           [categoriaId]
@@ -237,7 +243,7 @@ export const tareaResolvers = {
         const result = await query(
           `SELECT id, categoria_id, nivel_id, titulo, descripcion, fecha_vencimiento, 
                   prioridad, completado, tiempo_finalizacion_id, puntos_base, puntos_bonus,
-                  codigo_base, resultado_esperado, tipo
+                  codigo_base, resultado_esperado, tipo, config
            FROM tareas WHERE nivel_id = ? AND tipo <> 'sabotaje' 
            ORDER BY prioridad DESC, fecha_vencimiento ASC`,
           [nivelId]
@@ -290,7 +296,7 @@ export const tareaResolvers = {
         const result = await query(
           `SELECT id, categoria_id, nivel_id, titulo, descripcion, fecha_vencimiento, 
                   prioridad, completado, tiempo_finalizacion_id, puntos_base, puntos_bonus,
-                  codigo_base, resultado_esperado, tipo
+                  codigo_base, resultado_esperado, tipo, config
            FROM tareas WHERE prioridad = ? AND tipo <> 'sabotaje' 
            ORDER BY fecha_vencimiento ASC`,
           [prioridad]
@@ -347,7 +353,7 @@ export const tareaResolvers = {
         const result = await query(
           `SELECT id, categoria_id, nivel_id, titulo, descripcion, fecha_vencimiento, 
                   prioridad, completado, tiempo_finalizacion_id, puntos_base, puntos_bonus,
-                  codigo_base, resultado_esperado, tipo
+                  codigo_base, resultado_esperado, tipo, config
            FROM tareas WHERE completado = false AND tipo <> 'sabotaje' 
            ORDER BY prioridad DESC, fecha_vencimiento ASC`
         ) as any[];
@@ -391,7 +397,7 @@ export const tareaResolvers = {
       try {
         const campos = `t.id, t.categoria_id, t.nivel_id, t.titulo, t.descripcion, t.fecha_vencimiento,
                   t.prioridad, t.completado, t.tiempo_finalizacion_id, t.puntos_base, t.puntos_bonus,
-                  t.codigo_base, t.resultado_esperado, t.tipo`;
+                  t.codigo_base, t.resultado_esperado, t.tipo, t.config`;
 
         // 1º: un reto programado para hoy
         let result = await query(
@@ -541,7 +547,7 @@ export const tareaResolvers = {
         const newTarea = await query(
           `SELECT id, categoria_id, nivel_id, titulo, descripcion, fecha_vencimiento, 
                   prioridad, completado, tiempo_finalizacion_id, puntos_base, puntos_bonus,
-                  codigo_base, resultado_esperado, tipo
+                  codigo_base, resultado_esperado, tipo, config
            FROM tareas WHERE id = ?`,
           [insertId]
         ) as any[];
@@ -703,7 +709,7 @@ export const tareaResolvers = {
         const updatedTarea = await query(
           `SELECT id, categoria_id, nivel_id, titulo, descripcion, fecha_vencimiento, 
                   prioridad, completado, tiempo_finalizacion_id, puntos_base, puntos_bonus,
-                  codigo_base, resultado_esperado, tipo
+                  codigo_base, resultado_esperado, tipo, config
            FROM tareas WHERE id = ?`,
           [id]
         ) as any[];
@@ -776,7 +782,7 @@ export const tareaResolvers = {
       const filas = await query('SELECT id, tipo, config FROM tareas WHERE id = ?', [tareaId]) as any[];
       const tarea = filas[0];
       if (!tarea) throw new UserInputError('Tarea no encontrada');
-      if (tarea.tipo !== 'pilotaje') throw new UserInputError('Esta tarea no es una misión de pilotaje');
+      if (!esSimulacion(tarea)) throw new UserInputError('Esta tarea no es una misión ni un reto');
       if (!(await puedeAbrirTarea(usuario, tarea))) throw new ForbiddenError('No puedes abrir esta tarea');
       return misionParaGraphQL(await probarEscenario(tarea, codigo, escenario));
     },
@@ -801,8 +807,8 @@ export const tareaResolvers = {
       if (!(await puedeAbrirTarea(usuario, tarea))) {
         throw new ForbiddenError('Completa primero el ejercicio original para desbloquear este sabotaje');
       }
-      // Las misiones de pilotaje se corrigen simulando sus escenarios; el resto, con tests o salida
-      const mision = tarea.tipo === 'pilotaje' ? await corregirMision(tarea, codigo) : null;
+      // Las misiones y los retos se corrigen simulando sus escenarios; el resto, con tests o salida
+      const mision = esSimulacion(tarea) ? await corregirMision(tarea, codigo) : null;
       const { correcto, ejecucion, tests } = mision
         ? { correcto: mision.correcto, ejecucion: comoEjecucion(mision), tests: null }
         : await corregirTarea(tarea, codigo);

@@ -27,7 +27,7 @@ export const cajaNegraResolvers = {
       const tareas = await query('SELECT id, tipo, config FROM tareas WHERE id = ?', [tareaId]) as any[];
       const tarea = tareas[0];
       if (!tarea) throw new UserInputError('Tarea no encontrada');
-      if (tarea.tipo === 'pilotaje') throw new UserInputError('Las misiones de pilotaje tienen su propio visor');
+      if (tarea.tipo === 'pilotaje' || tarea.tipo === 'reto') throw new UserInputError('Las misiones y los retos tienen su propio visor');
       if (!(await puedeAbrirTarea(usuario, tarea))) throw new ForbiddenError('No puedes abrir esta tarea');
 
       // Solo los tests visibles: de los ocultos no se puede ver nada
