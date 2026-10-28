@@ -17,6 +17,8 @@ services:
       - NVIDIA_BASE_URL=http://mock-ia:8787/v1
       - ADMIN_EMAILS=admin-e2e@example.test
       - RATE_LIMIT_PER_MIN=5000
+      # Retos de calibración del motor (fase 5.0)
+      - RETOS_DE_PRUEBA=1
     depends_on:
       mock-ia:
         condition: service_started

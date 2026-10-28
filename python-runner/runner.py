@@ -21,7 +21,7 @@ from flask import Flask, jsonify, request
 
 from mutador import mutar
 from sandbox import TIMEOUT_SEGUNDOS, MEMORIA_MAX_MB, limitar_recursos, entorno_limpio
-from misiones.motor import ejecutar_mision
+from misiones.motor import MISIONES, ejecutar_mision, material_reto
 from trazador import trazar
 
 app = Flask(__name__)
@@ -137,6 +137,25 @@ def mision():
     except ValueError as e:
         return jsonify({'error': str(e)}), 400
     return jsonify({'resultados': resultados})
+
+
+@app.route('/reto/material', methods=['POST'])
+def reto_material():
+    """
+    Material público de un reto (el manual, los ejemplos...) SIN ejecutar código del alumno.
+    Recibe: { "mision": "bomba", "escenarios": [{semilla, params, nombre}] }   (solo los visibles)
+    Devuelve: { "funcion": "desactivar", "material": [{ nombre, material }] }
+    """
+    data = request.get_json(silent=True)
+    if not data or not isinstance(data.get('escenarios'), list):
+        return jsonify({'error': 'Faltan los escenarios'}), 400
+    if not 1 <= len(data['escenarios']) <= 10:
+        return jsonify({'error': 'Entre 1 y 10 escenarios'}), 400
+    try:
+        material = material_reto(data.get('mision', ''), data['escenarios'])
+        return jsonify({'funcion': MISIONES[data['mision']].funcion, 'material': material})
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
 
 
 @app.route('/trace', methods=['POST'])

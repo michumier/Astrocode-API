@@ -169,6 +169,84 @@ const migraciones: Migracion[] = [
   },
 ];
 
+// Retos de calibración del motor (fase 5.0). Solo con RETOS_DE_PRUEBA=1 (pruebas e2e y desarrollo):
+// no son ejercicios para alumnos, sirven para probar argumentos, lotes y consultas de punta a punta.
+export const retosDePrueba = [
+  {
+    titulo: '🧪 Calibración: argumentos',
+    descripcion: 'Escribe calibrar(a, b), que devuelva la suma de los dos números.',
+    codigoBase: 'def calibrar(a, b):\n    return 0\n',
+    solucion: 'def calibrar(a, b):\n    return a + b\n',
+    config: {
+      mision: 'diagnostico', formato: 'diagnostico',
+      escenarios: [
+        { nombre: 'Pareja A', semilla: 1, params: { modo: 'args' } },
+        { nombre: 'Pareja B', semilla: 2, params: { modo: 'args' } },
+        { semilla: 3, params: { modo: 'args' }, oculto: true },
+        { semilla: 4, params: { modo: 'args' }, oculto: true },
+      ],
+    },
+  },
+  {
+    titulo: '🧪 Calibración: lotes',
+    descripcion: 'Escribe calibrar(x, y), que devuelva (x + y) % 10. Se llama una vez por cada punto de la rejilla.',
+    codigoBase: 'def calibrar(x, y):\n    return 0\n',
+    solucion: 'def calibrar(x, y):\n    return (x + y) % 10\n',
+    config: {
+      mision: 'diagnostico', formato: 'diagnostico',
+      escenarios: [
+        { nombre: 'Rejilla 8×8', semilla: 1, params: { modo: 'lote', lado: 8 } },
+        { nombre: 'Rejilla 48×48', semilla: 2, params: { modo: 'lote', lado: 48 } },
+        { semilla: 3, params: { modo: 'lote', lado: 20 }, oculto: true },
+      ],
+    },
+  },
+  {
+    titulo: '🧪 Calibración: consultas',
+    descripcion: 'Escribe calibrar(sonda): acierta el número secreto con sonda.probar(n), que responde «mayor», «menor» o «abierta», antes de agotar sonda.intentos.',
+    codigoBase: 'def calibrar(sonda):\n    sonda.probar(1)\n',
+    solucion: `def calibrar(sonda):
+    bajo, alto = sonda.minimo, sonda.maximo
+    while bajo <= alto:
+        medio = (bajo + alto) // 2
+        r = sonda.probar(medio)
+        if r == "abierta":
+            return medio
+        if r == "mayor":
+            bajo = medio + 1
+        else:
+            alto = medio - 1
+`,
+    config: {
+      mision: 'diagnostico', formato: 'diagnostico',
+      escenarios: [
+        { nombre: 'Rango de mil', semilla: 1, params: { modo: 'consulta', maximo: 1000 } },
+        { nombre: 'Rango de un millón', semilla: 2, params: { modo: 'consulta', maximo: 1000000 } },
+        { semilla: 3, params: { modo: 'consulta', maximo: 1000000000 }, oculto: true },
+        { semilla: 4, params: { modo: 'consulta', maximo: 50 }, oculto: true },
+      ],
+    },
+  },
+];
+
+export async function sembrarRetosDePrueba() {
+  if (process.env.RETOS_DE_PRUEBA !== '1') return;
+  const [cat] = await pool.query("SELECT id FROM categorias WHERE nombre = 'Funciones'") as any[];
+  const [niv] = await pool.query("SELECT id FROM niveles WHERE nombre = 'Fácil'") as any[];
+  if (!(cat as any[]).length || !(niv as any[]).length) return;
+  for (const r of retosDePrueba) {
+    const [existe] = await pool.query("SELECT id FROM tareas WHERE titulo = ? AND tipo = 'reto'", [r.titulo]) as any[];
+    if ((existe as any[]).length) continue;
+    await pool.query(
+      `INSERT INTO tareas (categoria_id, nivel_id, titulo, descripcion, codigo_base, resultado_esperado, solucion, puntos_base, tipo, config)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 10, 'reto', ?)`,
+      [(cat as any[])[0].id, (niv as any[])[0].id, r.titulo, r.descripcion, r.codigoBase,
+       'Superar todos los escenarios (algunos ocultos).', r.solucion, JSON.stringify(r.config)]
+    );
+  }
+  console.log('Retos de calibración (RETOS_DE_PRUEBA=1) listos');
+}
+
 // Días que se guardan los intentos (privacidad). Se limpian al arrancar la API.
 const RETENCION_INTENTOS_DIAS = Number(process.env.RETENCION_INTENTOS_DIAS || 180);
 

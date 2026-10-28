@@ -87,12 +87,14 @@ export async function generarPista(datos: {
   sabotaje?: { descripcion: string; linea: number | null; diff: string } | null;
   // Misión de pilotaje: el alumno escribe piloto(sensores), que la simulación llama cada tick
   mision?: string | null;
+  // Reto de la fase 5 (bomba, lengua...): se corrige con escenarios, muchos de ellos ocultos
+  reto?: string | null;
 }): Promise<string> {
   // En los niveles 1 y 2 de un sabotaje la IA no recibe ni la solución ni el bug:
   // si los tuviera, le bastaría compararlos con el código para soltar el arreglo.
   const sabotajeOculto = !!datos.sabotaje && datos.nivel < 3;
   // En las misiones (abiertas, con muchas estrategias válidas) tampoco se da la solución hasta el nivel 3
-  const solucion = sabotajeOculto || (datos.mision && datos.nivel < 3) ? null : datos.solucion;
+  const solucion = sabotajeOculto || ((datos.mision || datos.reto) && datos.nivel < 3) ? null : datos.solucion;
 
   const sistema = `Eres "AstroTutor", el tutor de AstroCode, una plataforma con temática espacial para aprender Python desde cero.
 Tu alumno es principiante. Responde SIEMPRE en español, con un tono cercano y motivador, en 2-4 frases.
@@ -118,6 +120,7 @@ ${datos.sabotaje ? `MISIÓN DE SABOTAJE: el código era correcto y un saboteador
   }
 ` : ''}
 ${datos.mision ? `MISIÓN DE PILOTAJE (${datos.mision}): el alumno escribe piloto(sensores), que la simulación llama en cada tick; hay varias estrategias válidas. Ayúdale a razonar sobre los sensores y la decisión de cada tick, no le des la estrategia hecha.
+` : ''}${datos.reto ? `RETO (${datos.reto}): el alumno escribe la función que pide el enunciado y se comprueba con varios escenarios, muchos ocultos. Ayúdale a entender el enunciado y a encontrar qué caso no está cubriendo; no le des el código ni el resultado de ningún escenario.
 ` : ''}
 Dame la pista de nivel ${datos.nivel}.`;
 

@@ -76,6 +76,7 @@ export const iaResolvers = {
         nivel: Math.min(Math.max(Math.floor(nivel), 1), 3),
         sabotaje: sabotaje ? { descripcion: sabotaje.descripcion, linea: sabotaje.linea, diff: sabotaje.diff } : null,
         mision: tarea.tipo === 'pilotaje' ? (typeof tarea.config === 'string' ? JSON.parse(tarea.config) : tarea.config)?.mision : null,
+        reto: tarea.tipo === 'reto' ? (typeof tarea.config === 'string' ? JSON.parse(tarea.config) : tarea.config)?.formato || 'reto' : null,
       });
 
       await query('INSERT INTO pistas_ia (usuario_id, tarea_id) VALUES (?, ?)', [usuario.id, tareaId]);

@@ -87,7 +87,7 @@ export async function mutarCodigo(codigo: string, max = 12, semilla = 0): Promis
 
 export interface EscenarioMision {
   semilla: number;
-  params?: Record<string, number>;
+  params?: Record<string, any>;
   oculto?: boolean;
   nombre?: string;
 }
@@ -120,6 +120,26 @@ export async function ejecutarMision(codigo: string, mision: string, escenarios:
     return data.resultados;
   } catch (error: any) {
     throw new Error(error.response?.data?.error || 'No se pudo conectar con el python-runner para la misión');
+  }
+}
+
+export interface MaterialReto {
+  funcion: string;
+  material: { nombre: string; material: any }[];
+}
+
+// Material público de un reto (manual, ejemplos...) generado por el runner SIN ejecutar código del alumno.
+// Hay que pasarle solo los escenarios visibles.
+export async function materialReto(mision: string, escenarios: EscenarioMision[]): Promise<MaterialReto> {
+  try {
+    const { data } = await axios.post(
+      `${PYTHON_RUNNER_URL}/reto/material`,
+      { mision, escenarios },
+      { headers: { 'Content-Type': 'application/json' }, timeout: 15000 }
+    );
+    return data;
+  } catch (error: any) {
+    throw new Error(error.response?.data?.error || 'No se pudo conectar con el python-runner para preparar el reto');
   }
 }
 

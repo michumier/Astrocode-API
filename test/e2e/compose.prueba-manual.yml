@@ -1,0 +1,15 @@
+# Pila aislada para probar a mano en el navegador sin tocar la base de datos de desarrollo.
+# Web en http://localhost:3100 y API en http://localhost:4100 (proyecto propio: astrocode-prueba)
+#   docker compose -p astrocode-prueba -f docker-compose.yml -f test/e2e/compose.e2e.yml -f test/e2e/compose.prueba-manual.yml up -d --build
+#   docker compose -p astrocode-prueba -f docker-compose.yml -f test/e2e/compose.e2e.yml -f test/e2e/compose.prueba-manual.yml down -v
+services:
+  astrocode-api:
+    environment:
+      - CORS_ORIGIN=http://localhost:3100
+  astrocode-web:
+    ports: !override
+      - "127.0.0.1:3100:3000"
+    environment: !override
+      - REACT_APP_API_URL=http://localhost:4100/graphql
+      - WDS_SOCKET_PORT=0
+      - WATCHPACK_POLLING=true

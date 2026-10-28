@@ -354,7 +354,7 @@ Siete formatos de ejercicio nuevos sobre el motor de misiones: 💣 bomba, 👽 
 El diseño completo (requisitos, ejecución, frontales, riesgos y pruebas) está en **[`docs/diseno/fase-5-retos.md`](diseno/fase-5-retos.md)**. Aquí solo se lleva el avance.
 
 ### Tareas
-- [ ] 5.0 Motor de retos (E1–E5), `tipo='reto'`, `VistaReto` (M)
+- [x] 5.0 Motor de retos (E1–E5), `tipo='reto'`, `VistaReto` (M) — pruebas en `docs/pruebas/fase-5.0.md`
 - [ ] 5.1 💣 Bomba: B1, B2 (M)
 - [ ] 5.2 👽 Lengua alienígena: L1, L2, L3 (M)
 - [ ] 5.3 🔐 Cámara acorazada: C1, C2, C3 (M)
