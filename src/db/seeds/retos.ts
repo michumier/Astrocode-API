@@ -687,3 +687,113 @@ def investigar(log):
     },
   },
 ];
+
+// ---------------- 🎨 Nebulosa (fase 5.5) ----------------
+
+const LIENZO = `Escribe color(x, y, ancho, alto): devuelve el color de UN píxel. La web la llama una vez por cada píxel del lienzo y la imagen aparece.
+- x va de 0 a ancho-1 (de izquierda a derecha) e y de 0 a alto-1 (de ARRIBA a ABAJO, como en las pantallas).
+- Devuelve un color de la paleta, por nombre ("morado") o por número: 0 negro · 1 azul · 2 rojo · 3 verde · 4 amarillo · 5 gris · 6 morado · 7 naranja · 8 cian · 9 granate.
+- Los escenarios ocultos tienen OTROS tamaños (alguno de un solo píxel de alto): usa siempre ancho y alto, nunca números fijos.
+- Las distancias se miden desde el CENTRO de cada píxel, que está en (x + 0.5, y + 0.5).`;
+
+export const retosNebulosa: RetoSemilla[] = [
+  {
+    titulo: '🎨 La bandera de Kepler',
+    categoria: 'Estructuras Condicionales',
+    nivel: 'Fácil',
+    puntos: 150,
+    descripcion: `La colonia de Kepler necesita su bandera y la vas a pintar con código.
+${LIENZO}
+
+La bandera:
+- Tres franjas verticales iguales: morado, naranja y morado. La franja de un píxel es x * 3 // ancho (0, 1 o 2).
+- Un sol amarillo en el centro del lienzo (ancho / 2, alto / 2), con radio min(ancho, alto) // 4. Un píxel es del sol si su distancia al centro es menor o igual que el radio. Pista: compara los cuadrados, (x + 0.5 - ancho / 2) ** 2 + … <= radio ** 2, y te ahorras la raíz.
+- El sol va por encima de las franjas.
+
+Tiene que coincidir el 100 % de los píxeles.`,
+    codigoBase: `def color(x, y, ancho, alto):
+    # x: 0 … ancho-1 (izquierda → derecha) · y: 0 … alto-1 (arriba → abajo)
+    if x < ancho // 3:
+        return "morado"
+    return "negro"
+`,
+    resultadoEsperado: 'Pintar la bandera exacta en los 6 lienzos (2 visibles y 4 ocultos de otros tamaños).',
+    solucion: `def color(x, y, ancho, alto):
+    radio = min(ancho, alto) // 4
+    if (x + 0.5 - ancho / 2) ** 2 + (y + 0.5 - alto / 2) ** 2 <= radio ** 2:
+        return "amarillo"
+    if x * 3 // ancho == 1:
+        return "naranja"
+    return "morado"
+`,
+    config: {
+      mision: 'nebulosa',
+      formato: 'nebulosa',
+      escenarios: [
+        { nombre: 'Lienzo cuadrado (48×48)', semilla: 451, params: { variante: 'bandera', ancho: 48, alto: 48 } },
+        { nombre: 'Lienzo apaisado (64×32)', semilla: 452, params: { variante: 'bandera', ancho: 64, alto: 32 } },
+        { semilla: 9451, params: { variante: 'bandera', ancho: 25, alto: 60 }, oculto: true },
+        { semilla: 9452, params: { variante: 'bandera', ancho: 80, alto: 40 }, oculto: true },
+        { semilla: 9453, params: { variante: 'bandera', ancho: 61, alto: 1 }, oculto: true },
+        { semilla: 9454, params: { variante: 'bandera', ancho: 37, alto: 37 }, oculto: true },
+      ],
+    },
+  },
+  {
+    titulo: '🎨 Los anillos de Saturno',
+    categoria: 'Operadores',
+    nivel: 'Intermedio',
+    puntos: 200,
+    descripcion: `Ahora toca un planeta con anillos… y una luna.
+${LIENZO}
+
+Llama u = max(1, min(ancho, alto) // 8) a la unidad de medida. De arriba abajo en prioridad:
+1. La luna (amarilla): círculo de radio u con centro en (ancho * 0.75, alto * 0.25), arriba a la derecha.
+2. El planeta (naranja): círculo de radio 2 * u en el centro del lienzo (ancho / 2, alto / 2).
+3. Los anillos: con dx y dy, la distancia del píxel al centro del lienzo, calcula d = raíz(dx² + (2·dy)²) (así los anillos salen el doble de anchos que de altos) y k = d // u. Si k está entre 3 y 6, el píxel es cian cuando k es impar y azul cuando es par.
+4. Todo lo demás, negro.
+
+Basta con que coincida el 97 % de los píxeles; ⭐⭐⭐ con el 100 %. Pista: el operador % te dice si k es par o impar.`,
+    codigoBase: `import math
+
+
+def color(x, y, ancho, alto):
+    u = max(1, min(ancho, alto) // 8)
+    dx = x + 0.5 - ancho / 2
+    dy = y + 0.5 - alto / 2
+
+    # Tu código aquí
+
+    return "negro"
+`,
+    resultadoEsperado: 'Pintar el planeta, sus anillos y la luna en los 6 lienzos con al menos un 97 % de coincidencia.',
+    solucion: `import math
+
+
+def color(x, y, ancho, alto):
+    u = max(1, min(ancho, alto) // 8)
+    px, py = x + 0.5, y + 0.5
+    if (px - ancho * 0.75) ** 2 + (py - alto * 0.25) ** 2 <= u ** 2:
+        return "amarillo"
+    dx, dy = px - ancho / 2, py - alto / 2
+    if dx * dx + dy * dy <= (2 * u) ** 2:
+        return "naranja"
+    k = int(math.sqrt(dx * dx + (2 * dy) ** 2) // u)
+    if 3 <= k <= 6:
+        return "cian" if k % 2 else "azul"
+    return "negro"
+`,
+    config: {
+      mision: 'nebulosa',
+      formato: 'nebulosa',
+      escenarios: [
+        { nombre: 'Lienzo cuadrado (48×48)', semilla: 461, params: { variante: 'anillos', ancho: 48, alto: 48 } },
+        { nombre: 'Lienzo apaisado (64×32)', semilla: 462, params: { variante: 'anillos', ancho: 64, alto: 32 } },
+        { semilla: 9461, params: { variante: 'anillos', ancho: 25, alto: 60 }, oculto: true },
+        { semilla: 9462, params: { variante: 'anillos', ancho: 80, alto: 40 }, oculto: true },
+        { semilla: 9463, params: { variante: 'anillos', ancho: 100, alto: 64 }, oculto: true },
+        { semilla: 9464, params: { variante: 'anillos', ancho: 61, alto: 1 }, oculto: true },
+      ],
+    },
+  },
+];

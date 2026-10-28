@@ -2,7 +2,7 @@ import { PoolConnection } from 'mysql2/promise';
 import { pool } from '../config/db';
 import { testsRetosDiarios } from './seeds/retosDiarios';
 import { misionesIniciales } from './seeds/misiones';
-import { retosBomba, retosLengua, retosCamara, retosImpostor, RetoSemilla } from './seeds/retos';
+import { retosBomba, retosLengua, retosCamara, retosImpostor, retosNebulosa, RetoSemilla } from './seeds/retos';
 
 /*
  * Migraciones de la base de datos.
@@ -187,6 +187,11 @@ const migraciones: Migracion[] = [
     // Fase 5.4: 🔍 Sabotaje en el reactor (I1) y El apagón (I2)
     id: '016_retos_impostor',
     run: (conn) => sembrarRetos(conn, retosImpostor),
+  },
+  {
+    // Fase 5.5: 🎨 La bandera de Kepler (N1) y Los anillos de Saturno (N2)
+    id: '017_retos_nebulosa',
+    run: (conn) => sembrarRetos(conn, retosNebulosa),
   },
 ];
 
