@@ -153,7 +153,10 @@ def reto_material():
         return jsonify({'error': 'Entre 1 y 10 escenarios'}), 400
     try:
         material = material_reto(data.get('mision', ''), data['escenarios'])
-        return jsonify({'funcion': MISIONES[data['mision']].funcion, 'material': material})
+        # La función puede depender del escenario (en la radio, R3 es recibir() y no transmitir())
+        primero = data['escenarios'][0]
+        funcion = MISIONES[data['mision']](primero.get('semilla', 0), primero.get('params')).funcion
+        return jsonify({'funcion': funcion, 'material': material})
     except ValueError as e:
         return jsonify({'error': str(e)}), 400
 

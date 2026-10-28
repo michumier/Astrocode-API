@@ -797,3 +797,206 @@ def color(x, y, ancho, alto):
     },
   },
 ];
+
+// ---------------- 🎵 Radio (fase 5.6) ----------------
+
+const ESCALA_PY = `ESCALA = ["do", "re", "mi", "fa", "sol", "la", "si", "do2", "re2", "mi2", "fa2", "sol2", "la2", "si2"]`;
+const MORSE_PY = `MORSE = {
+    "A": ".-", "B": "-...", "C": "-.-.", "D": "-..", "E": ".", "F": "..-.",
+    "G": "--.", "H": "....", "I": "..", "J": ".---", "K": "-.-", "L": ".-..",
+    "M": "--", "N": "-.", "O": "---", "P": ".--.", "Q": "--.-", "R": ".-.",
+    "S": "...", "T": "-", "U": "..-", "V": "...-", "W": ".--", "X": "-..-",
+    "Y": "-.--", "Z": "--..", "0": "-----", "1": ".----", "2": "..---", "3": "...--",
+    "4": "....-", "5": ".....", "6": "-....", "7": "--...", "8": "---..", "9": "----.",
+}`;
+
+const TRANSMISOR_PY = `${ESCALA_PY}
+${MORSE_PY}
+
+
+def transmitir(senal):
+    palabras = []
+    for palabra in senal["mensaje"].upper().split():
+        limpia = [c for c in palabra if c in MORSE]
+        if limpia:
+            palabras.append(limpia)
+    inicio = ESCALA.index(senal["nota"])
+    salida = []
+    for i, palabra in enumerate(palabras):
+        nota = ESCALA[(inicio + i) % len(ESCALA)]
+        if i > 0:
+            salida.append(("silencio", 7))
+        for j, letra in enumerate(palabra):
+            if j > 0:
+                salida.append(("silencio", 3))
+            for k, simbolo in enumerate(MORSE[letra]):
+                if k > 0:
+                    salida.append(("silencio", 1))
+                salida.append((nota, 1 if simbolo == "." else 3))
+    return salida
+`;
+
+export const retosRadio: RetoSemilla[] = [
+  {
+    titulo: '🎵 SOS',
+    categoria: 'Bucles',
+    nivel: 'Fácil',
+    puntos: 150,
+    descripcion: `Tu nave necesita ayuda y la baliza está muda. Prográmala: tu código no dibuja, SUENA.
+Escribe transmitir(senal). senal es un diccionario como {"nota": "la", "repeticiones": 3}. Devuelve una lista de parejas (nota, pulsos): cada pareja es un sonido (o un silencio) y cuánto dura.
+
+El SOS en morse es S O S = ... --- ... :
+- S = 3 pitidos de 1 pulso; O = 3 pitidos de 3 pulsos.
+- Entre dos pitidos seguidos, ("silencio", 1).
+- Al final de cada SOS, ("silencio", 4).
+- Todos los pitidos suenan en senal["nota"], y el SOS completo se repite senal["repeticiones"] veces.
+
+Ejemplo del principio con la nota "la": [("la", 1), ("silencio", 1), ("la", 1), ("silencio", 1), ("la", 1), ("silencio", 1), ("la", 3), …]
+Con el botón 🔊 puedes escuchar tu señal y la señal objetivo.`,
+    codigoBase: `def transmitir(senal):
+    # senal = {"nota": "la", "repeticiones": 3}
+    nota = senal["nota"]
+    salida = [(nota, 1), ("silencio", 1)]
+
+    # Tu código aquí
+
+    return salida
+`,
+    resultadoEsperado: 'Transmitir la baliza exacta en los 6 escenarios (2 visibles y 4 ocultos con otras notas y repeticiones).',
+    solucion: `def transmitir(senal):
+    salida = []
+    for _ in range(senal["repeticiones"]):
+        for i, pulsos in enumerate([1, 1, 1, 3, 3, 3, 1, 1, 1]):
+            if i > 0:
+                salida.append(("silencio", 1))
+            salida.append((senal["nota"], pulsos))
+        salida.append(("silencio", 4))
+    return salida
+`,
+    config: {
+      mision: 'radio',
+      formato: 'radio',
+      escenarios: [
+        { nombre: 'Baliza en la (×3)', semilla: 471, params: { variante: 'sos', nota: 'la', repeticiones: 3 } },
+        { nombre: 'Baliza aguda (do2 ×2)', semilla: 472, params: { variante: 'sos', nota: 'do2', repeticiones: 2 } },
+        { semilla: 9471, params: { variante: 'sos', nota: 'sol', repeticiones: 1 }, oculto: true },
+        { semilla: 9472, params: { variante: 'sos', nota: 'si2', repeticiones: 4 }, oculto: true },
+        { semilla: 9473, params: { variante: 'sos', nota: 'do', repeticiones: 5 }, oculto: true },
+        { semilla: 9474, params: { variante: 'sos', nota: 'mi', repeticiones: 2 }, oculto: true },
+      ],
+    },
+  },
+  {
+    titulo: '🎵 El transmisor morse',
+    categoria: 'Estructuras de Datos',
+    nivel: 'Intermedio',
+    puntos: 200,
+    descripcion: `Ahora la radio tiene que poder enviar CUALQUIER mensaje.
+Escribe transmitir(senal), con senal = {"mensaje": "hola  tierra", "nota": "si2"}, y devuelve la lista de parejas (nota, pulsos). El código base trae el diccionario MORSE y la ESCALA de notas. Cuatro reglas a la vez:
+1. Tiempos del morse: punto = 1 pulso, raya = 3. Silencios: 1 entre los símbolos de una letra, 3 entre letras, 7 entre palabras y NADA al final.
+2. Cada palabra suena en la SIGUIENTE nota de la ESCALA, empezando por senal["nota"]. Tras la última nota (si2) se vuelve al principio (do). Pista: el operador %.
+3. El mensaje puede venir en minúsculas y con varios espacios seguidos, que cuentan como una sola separación.
+4. Los caracteres que no están en MORSE (¿, !, comas…) se ignoran; si una palabra se queda vacía, no cuenta.
+
+Ejemplo resuelto: {"mensaje": "et a", "nota": "si2"} →
+[("si2", 1), ("silencio", 3), ("si2", 3), ("silencio", 7), ("do", 1), ("silencio", 1), ("do", 3)]
+(E = . y T = -, separadas por 3; luego 7 de separación entre palabras, y la segunda palabra suena en do porque después de si2 se vuelve al principio).`,
+    codigoBase: `${ESCALA_PY}
+${MORSE_PY}
+
+
+def transmitir(senal):
+    # senal = {"mensaje": "hola  tierra", "nota": "si2"}
+    salida = []
+
+    # Tu código aquí
+
+    return salida
+`,
+    resultadoEsperado: 'Transmitir los 7 mensajes exactos (2 visibles y 5 ocultos: una letra sola, espacios dobles, signos y más palabras que notas).',
+    solucion: TRANSMISOR_PY,
+    config: {
+      mision: 'radio',
+      formato: 'radio',
+      escenarios: [
+        { nombre: '«SOS» en la', semilla: 481, params: { variante: 'morse', mensaje: 'SOS', nota: 'la' } },
+        { nombre: '«hola  tierra» en si2', semilla: 482, params: { variante: 'morse', mensaje: 'hola  tierra', nota: 'si2' } },
+        { semilla: 9481, params: { variante: 'morse', mensaje: 'e', nota: 'do' }, oculto: true },
+        { semilla: 9482, params: { variante: 'morse', mensaje: 'buenos  dias   tripulacion', nota: 'mi' }, oculto: true },
+        { semilla: 9483, params: { variante: 'morse', mensaje: '¿hola, mundo! ¡¡ !!', nota: 'sol' }, oculto: true },
+        { semilla: 9484, params: { variante: 'morse', mensaje: 'a b c d e f g h i j k l m n o p', nota: 're' }, oculto: true },
+        { semilla: 9485, params: { variante: 'morse', mensaje: 'mision 42 completada', nota: 'fa2' }, oculto: true },
+      ],
+    },
+  },
+  {
+    titulo: '🎵 La señal con ruido',
+    categoria: 'Algoritmos Avanzados',
+    nivel: 'Difícil',
+    puntos: 300,
+    descripcion: `Llega una transmisión de la Tierra… pero DAÑADA. Ahora haces el camino inverso: de sonidos a texto.
+Escribe recibir(senal) y devuelve el mensaje en MAYÚSCULAS, con un espacio entre palabras. senal es una lista de parejas como las del transmisor, pero estropeada:
+- Las duraciones no son exactas. Pitidos de 1–2 pulsos = punto; de 3–5 = raya. Silencios de 1–2 = dentro de la letra; de 3–5 = entre letras; de 6 o más = entre palabras.
+- Hay estática: parejas ("estatica", n) que hay que quitar. Si al quitarla quedan dos silencios juntos, SE SUMAN.
+- Puede empezar o acabar con silencio o con estática.
+- La nota de los pitidos no importa (cada palabra puede venir en una nota distinta).
+
+Ejemplo resuelto: [("la", 2), ("silencio", 2), ("estatica", 1), ("silencio", 2), ("la", 4)]
+Quitada la estática, los dos silencios suman 4 (separación entre letras); se leen . y - → "ET".
+Pista: un diccionario invertido {código: letra} te traduce cada letra de golpe.`,
+    codigoBase: `${MORSE_PY}
+
+
+def recibir(senal):
+    # senal = [("la", 2), ("silencio", 2), ("estatica", 1), ...]
+    texto = ""
+    for tipo, pulsos in senal:
+
+        # Tu código aquí
+
+        pass
+    return texto
+`,
+    resultadoEsperado: 'Descifrar las 8 transmisiones (2 visibles y 6 ocultas: estática en los bordes y duraciones en los límites de cada umbral).',
+    solucion: `${MORSE_PY}
+
+INVERSO = {codigo: letra for letra, codigo in MORSE.items()}
+
+
+def recibir(senal):
+    limpia = []
+    for tipo, d in senal:
+        if tipo == "estatica":
+            continue
+        if limpia and tipo == "silencio" and limpia[-1][0] == "silencio":
+            limpia[-1] = ("silencio", limpia[-1][1] + d)
+        else:
+            limpia.append((tipo, d))
+    texto, letra = "", ""
+    for tipo, d in limpia:
+        if tipo != "silencio":
+            letra += "." if d <= 2 else "-"
+        elif d >= 3:
+            texto += INVERSO.get(letra, "?") if letra else ""
+            letra = ""
+            if d >= 6:
+                texto += " "
+    texto += INVERSO.get(letra, "") if letra else ""
+    return texto.strip()
+`,
+    config: {
+      mision: 'radio',
+      formato: 'radio',
+      escenarios: [
+        { nombre: 'Socorro con interferencias', semilla: 491, params: { variante: 'descifrar', mensaje: 'SOS', estatica: 1 } },
+        { nombre: 'Saludo desde la Tierra', semilla: 492, params: { variante: 'descifrar', mensaje: 'HOLA TIERRA' } },
+        { semilla: 9491, params: { variante: 'descifrar' }, oculto: true },
+        { semilla: 9492, params: { variante: 'descifrar', bordes: true }, oculto: true },
+        { semilla: 9493, params: { variante: 'descifrar', extremos: true }, oculto: true },
+        { semilla: 9494, params: { variante: 'descifrar', extremos: true, bordes: true }, oculto: true },
+        { semilla: 9495, params: { variante: 'descifrar', estatica: 8 }, oculto: true },
+        { semilla: 9496, params: { variante: 'descifrar', mensaje: 'E T 5 0', extremos: true }, oculto: true },
+      ],
+    },
+  },
+];
