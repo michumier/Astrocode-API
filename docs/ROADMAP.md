@@ -365,6 +365,29 @@ El diseño completo (requisitos, ejecución, frontales, riesgos y pruebas) está
 
 ---
 
+## Fase 6 — 🎨 Rediseño del frontal
+
+Llevar la web «a otro nivel» sin tocar lo que la identifica: **el sistema solar con los planetas girando y el logo se quedan**. Prediseño aprobado el 29-oct-2026 ([lienzo](https://claude.ai/artifact/EhzYLRtiZoSsgY135Ff24G)):
+- **Color:** sale del logo. Fondo azul noche y paneles planos, sin cristal ni degradados. Turquesa para el progreso, **oro para la acción principal** y los puntos, y coral solo para lo «Difícil».
+- **Progreso:** cada planeta es una **constelación** y cada ejercicio, una estrella que se enciende.
+- **Botón principal:** en oro, con una puntada discontinua interior; se hunde un poco al pulsar.
+- **Tipografía:** Bricolage Grotesque en los títulos, Onest para leer y JetBrains Mono para el código.
+- **Todo en español** e iconos SVG en lugar de emojis en la interfaz.
+- **Público:** de 18 a 23 años.
+- **Órbitas:** planas, como ahora.
+- **Herramientas:** el trabajo se apoya en las skills de diseño Impeccable y de Emil Kowalski (instaladas solo en el proyecto web).
+
+### Tareas
+- [x] 6.0 Base: tokens de color y tipografía, fuentes servidas por la propia web, estilos globales (selección, foco, barras de desplazamiento) y kit de componentes (botón, etiqueta, panel, campo, aviso, iconos, barra superior, constelación) (M) — pruebas en `docs/pruebas/fase-6.0.md`
+- [x] 6.1 Mapa: el sistema solar con los planetas repartidos y las etiquetas derechas, la constelación del planeta en curso, el reto diario, el ranking sin correos, «Sigue donde lo dejaste» y el panel lateral del planeta (M) — pruebas en `docs/pruebas/fase-6.1.md`
+- [x] 6.2 Ejercicio: enunciado con Markdown, una sola acción principal, salida con las pruebas, AstroTutor; caja negra y sabotaje con los nuevos estilos (M) — pruebas en `docs/pruebas/fase-6.2.md`
+- [x] 6.3 Retos y misiones: el marco de `VistaReto` y del visor de misiones con el nuevo sistema; los visores de cada formato se mantienen y se ajustan los colores (M)
+- [x] 6.4 Acceso: bienvenida, entrar y crear cuenta (S)
+- [x] 6.5 Perfil, ranking completo y guía de Python (M)
+- [x] 6.6 Panel de administración, repaso en móvil, auditoría final (accesibilidad, rendimiento, detector de Impeccable) y documento del sistema de diseño (M)
+
+---
+
 ## Reglas para todas las fases
 - **Rama `feature/` por fase** (`feature/fase-1-sabotaje`…) en cada repo afectado. Claude prepara la PR y Miguel revisa y fusiona.
 - **Plan de pruebas obligatorio al terminar cada fase** (`docs/pruebas/fase-N.md` en la API): pruebas automáticas y manuales con su resultado. **No se pasa a la siguiente fase sin ejecutarlo entero en verde.**
