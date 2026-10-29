@@ -65,5 +65,32 @@ docker compose -p astrocode-prueba -f docker-compose.yml -f test/e2e/compose.e2e
 | M1–M8 | ✅ | |
 
 ## 4. Notas
-- **No probado en el navegador:** el sabotaje, porque no hay sabotajes publicados en la base de datos de pruebas (la sala de máquinas no aparece). Lo cubre A6.
 - Los puntos de la cabecera son los base del ejercicio; la enhorabuena enseña los ganados, que pueden incluir la bonificación por tiempo.
+
+## 5. Repaso de 6.0–6.2 (29-oct-2026)
+
+Pasada de revisión sobre todo lo rediseñado: código, accesibilidad (axe-core 4.10) y el sabotaje en el navegador, que había quedado sin probar.
+
+**Sabotaje en el navegador:** publicado uno de «Validar Paréntesis» con las mutaciones de admin y desbloqueado para un alumno. Sale en la sala de máquinas; la vista enseña la alerta, la etiqueta y reiniciar «al código saboteado original»; al repararlo, «¡Sistema reparado!», el diff de la revelación y la insignia Cirujano. ✅
+
+**Retocado:**
+
+| Dónde | Qué |
+|---|---|
+| Ejercicio | El título del sabotaje ya no repite «🕵️ Sabotaje:» (lo dice la etiqueta). Cubierto en A6 |
+| Ejercicio | La etiqueta de dificultad solo sale si es un nivel (en las copias salía «Reto Diario» dos veces) |
+| Ejercicio | «Test oculto (oculta)» → «Prueba oculta» |
+| Ejercicio | «Insignia nueva: Cirujano. …» se partía en líneas sueltas |
+| Ejercicio | Enunciado y salida se pueden enfocar con el teclado para hacer scroll (axe) |
+| Ejercicio | Las etiquetas del enunciado son `h2`, no `h3` (orden de títulos, axe) |
+| Enhorabuena | Al cerrarla (Escape, fondo o «Quedarme aquí») el foco vuelve a «Ejecutar» |
+| Mapa | Las dos columnas tienen nombre propio como regiones (axe) |
+| Mapa | Al cerrar el panel de un planeta el foco vuelve a ese planeta |
+| Fondo de estrellas | Oculto a lectores de pantalla y quieto con «reducir movimiento» (sin bucle de animación) |
+| Menú de cuenta | Sin roles de menú a medias; Escape devuelve el foco al avatar |
+
+**Resultado:** tipos, 22/22 pruebas, build y detector de Impeccable con 0 hallazgos. axe sin infracciones en el mapa, el panel, el ejercicio y la enhorabuena, salvo dos falsos positivos:
+- `.cm-scroller` de CodeMirror: su zona editable sí recibe el foco;
+- contraste del reto diario: el panel del navegador estaba oculto (ventana 0×0). A mano, #2A1C04 sobre #F4B942 da ~10:1.
+
+**Queda para 6.3–6.6:** los avisos del build están en pantallas viejas (login, registro, perfil), que se rehacen ahí.
