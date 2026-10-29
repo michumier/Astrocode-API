@@ -382,7 +382,7 @@ Llevar la web «a otro nivel» sin tocar lo que la identifica: **el sistema sola
 - [x] 6.1 Mapa: el sistema solar con los planetas repartidos y las etiquetas derechas, la constelación del planeta en curso, el reto diario, el ranking sin correos, «Sigue donde lo dejaste» y el panel lateral del planeta (M) — pruebas en `docs/pruebas/fase-6.1.md`
 - [x] 6.2 Ejercicio: enunciado con Markdown, una sola acción principal, salida con las pruebas, AstroTutor; caja negra y sabotaje con los nuevos estilos (M) — pruebas en `docs/pruebas/fase-6.2.md`
 - [x] 6.3 Retos y misiones: el marco de `VistaReto` y del visor de misiones con el nuevo sistema; los visores de cada formato se mantienen y se ajustan los colores (M)
-- [ ] 6.4 Acceso: bienvenida, entrar y crear cuenta (S)
+- [x] 6.4 Acceso: bienvenida, entrar y crear cuenta (S)
 - [ ] 6.5 Perfil, ranking completo y guía de Python (M)
 - [ ] 6.6 Panel de administración, repaso en móvil, auditoría final (accesibilidad, rendimiento, detector de Impeccable) y documento del sistema de diseño (M)
 
