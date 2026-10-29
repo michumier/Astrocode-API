@@ -72,6 +72,17 @@ docker compose -p astrocode-prueba -f docker-compose.yml -f test/e2e/compose.e2e
 | M5–M7 | ✅ | |
 | M8 | ✅ tras corregir | Las etiquetas de los planetas se quedaban en 6 px al encoger el sistema: ahora se compensan. Además, el fondo de estrellas (`100vw`) y un desajuste de 2 px de la rejilla daban scroll horizontal |
 
-## 4. Pendiente de decidir (producto)
-- **Mercurio, Venus y Tierra comparten el nivel 1:** los tres enseñan los mismos 16 ejercicios. Marte y Júpiter comparten el nivel 2. Con las constelaciones se nota más: ¿repartimos los ejercicios entre los planetas que comparten nivel?
-- **«Sigue donde lo dejaste»** se quitó porque la API no guarda el último ejercicio abierto. Su papel lo cumple la «siguiente estrella».
+## 4. Reparto de ejercicios entre planetas (decidido el 29-oct-2026)
+Antes, Mercurio, Venus y Tierra enseñaban los mismos ejercicios (comparten el nivel 1), igual que Marte y Júpiter (nivel 2). Ahora se reparten (`client/src/utils/planetas.ts`):
+- los ejercicios de un nivel se separan por tipo (ejercicios, retos y misiones) y se ordenan por id;
+- cada tipo se trocea en partes seguidas, una por planeta: el primero se queda lo más básico y cada planeta recibe su mezcla de tipos;
+- el reparto no depende del orden en que lleguen.
+
+El **planeta en curso** pasa a ser el primer planeta abierto al que le quedan estrellas; si no le queda ninguna a nadie, el más lejano.
+
+| ID | Qué se comprueba | Resultado |
+|---|---|---|
+| A8 | Los planetas que comparten nivel se reparten todos los ejercicios sin repetir ninguno; mezcla de tipos; el orden de llegada no cambia el reparto; Saturno se queda su nivel entero | ✅ `planetas.test.ts` (3), 15/15 en total |
+| M9 | Alumno con 550 pts y 3 ejercicios hechos | ✅ Mercurio 7 («1 de 7»), Venus 5 («2 de 5»), Tierra 4: los 16 del nivel 1. Marte, 9. La constelación de la izquierda es la de Mercurio, el primero con estrellas pendientes |
+
+«Sigue donde lo dejaste» se quitó porque la API no guarda el último ejercicio abierto; su papel lo cumple la «siguiente estrella».
