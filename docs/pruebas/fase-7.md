@@ -88,7 +88,32 @@ Los retos y la misión suman estrellas: el mínimo sin bonificación es 650, 115
   - objetivos con `código`;
   - resultado esperado completo. ✅
 
-## 5. Notas y decisiones pendientes
+## 5. Notas
 - **Solucionario:** está en `Desktop\claude\Astrocode\SOLUCIONARIO.md`, ordenado por planeta, con los puntos acumulados. **No se sube al repositorio**, porque tiene todas las soluciones.
-- **Retos diarios repetidos:** hay 3 retos copiados 3 veces (ids 46–54). Como el reto del día rota entre las 9 tareas, el mismo reto da 1000 puntos cada vez que vuelve. No se tocan porque borrar filas podría llevarse progreso. Lo decide Miguel.
+- **Retos diarios repetidos:** resuelto en 7.4 (sección 6).
 - **Puntos de Saturno:** sus ejercicios de código valen 500–700 puntos, frente a los 300 de sus retos. Se mantienen como estaban.
+
+## 6. Retos diarios (7.4)
+
+Miguel decidió quitar las copias y dejar preparados un par de retos más.
+
+- **Migración `021_retos_diarios`:**
+  - de cada reto diario repetido (mismo título, categoría «Reto Diario») se queda la copia más antigua;
+  - antes de borrar las demás, su progreso pasa a la que se queda: completadas (si el alumno tenía dos, cuenta una), intentos, pistas y sabotajes;
+  - los puntos ya ganados no cambian;
+  - en la BD real las copias 49–54 no tenían nada asociado.
+- **Dos retos nuevos** (`src/db/seeds/retosDiariosNuevos.ts`), con el mismo formato que los demás (una función, un ejemplo y 5 tests, 3 ocultos):
+  - **Comprimir una señal:** `"aaabcc"` → `"a3b1c2"`;
+  - **Dos señales que suman el objetivo:** las posiciones de la pareja que suma el objetivo.
+- El reto del día rota ahora entre **5 retos distintos**: cada uno vuelve cada 5 días y solo puntúa la primera vez.
+- **e2e:**
+  - las pruebas de sabotaje crean sus propias copias de «Validar Paréntesis» (`copiaParentesis()`);
+  - una prueba nueva comprueba que no hay títulos repetidos, que hay 5 retos y que los dos nuevos se superan con una solución y no con el código base.
+
+| ID | Prueba | Resultado |
+|---|---|---|
+| R1 | e2e completo | ✅ 118/118 |
+| R2 | Copia repetida **con** una completada, un intento y una pista → al aplicar 021, todo pasa al reto que se queda y la copia desaparece | ✅ |
+| R3 | Todas las tareas: con su solución / con el código base | ✅ 46/46 superadas / 0/46 |
+| R4 | `dailyChallenge` devuelve un reto | ✅ «Validar Paréntesis» |
+

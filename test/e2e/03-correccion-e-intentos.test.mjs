@@ -139,3 +139,23 @@ test('misIntentos solo devuelve los del propio usuario', async () => {
   const sinSesion = await gql(MIS_INTENTOS, { id: '1' });
   assert.ok(sinSesion.errors);
 });
+
+test('retos diarios (fase 7): sin copias repetidas, con los 2 nuevos y se superan con su solución', async () => {
+  const alumno = await nuevoAlumno();
+  const retos = (await gql(`{ tareasPorCategoria(categoriaId: 16){ id titulo codigoBase } }`, {}, alumno.token)).data.tareasPorCategoria;
+  const titulos = retos.map((r) => r.titulo);
+  assert.equal(new Set(titulos).size, titulos.length, `títulos repetidos: ${titulos}`);
+  assert.equal(retos.length, 5);
+  const soluciones = {
+    'Comprimir una señal': 'def comprimir(senal):\n    s = ""\n    i = 0\n    while i < len(senal):\n        j = i\n        while j < len(senal) and senal[j] == senal[i]:\n            j += 1\n        s += senal[i] + str(j - i)\n        i = j\n    return s',
+    'Dos señales que suman el objetivo': 'def dos_suma(numeros, objetivo):\n    for i in range(len(numeros)):\n        for j in range(i + 1, len(numeros)):\n            if numeros[i] + numeros[j] == objetivo:\n                return (i, j)',
+  };
+  for (const [titulo, codigo] of Object.entries(soluciones)) {
+    const reto = retos.find((r) => r.titulo === titulo);
+    assert.ok(reto, `falta «${titulo}»`);
+    assert.equal((await enviar(alumno.token, reto.id, reto.codigoBase)).correcto, false);
+    const r = await enviar(alumno.token, reto.id, codigo);
+    assert.equal(r.correcto, true, `${titulo}: ${JSON.stringify(r.tests)}`);
+    assert.equal(r.tests.total, 5);
+  }
+});

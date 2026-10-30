@@ -1,7 +1,7 @@
 // Fase 1: misiones de sabotaje
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { gql, codigoError, nuevoAlumno, admin, enviar, ENVIAR_SOLUCION, tareaSinTests } from './helpers.mjs';
+import { gql, codigoError, nuevoAlumno, admin, enviar, ENVIAR_SOLUCION, tareaSinTests, copiaParentesis } from './helpers.mjs';
 
 const SOLUCION_PARENTESIS = `def es_valido(cadena):
     pila = []
@@ -23,9 +23,10 @@ const ENVIAR_CON_REVELACION = ENVIAR_SOLUCION.replace('correcto yaCompletada', '
 const ADMIN = await admin();
 const A = ADMIN.token;
 
-// Las 3 copias del reto «Validar Paréntesis» (una para cada bloque de pruebas)
-const copias = (await gql(`{ tareasPorCategoria(categoriaId: 16){ id titulo } }`, {}, A)).data.tareasPorCategoria
+// El reto diario «Validar Paréntesis» y dos copias suyas creadas aquí (una para cada bloque de pruebas)
+const original = (await gql(`{ tareasPorCategoria(categoriaId: 16){ id titulo } }`, {}, A)).data.tareasPorCategoria
   .filter((t) => t.titulo === 'Validar Paréntesis').map((t) => t.id);
+const copias = [...original, await copiaParentesis(), await copiaParentesis()];
 
 // Deshace un sabotaje de una sola línea a partir de su diff (lo que haría un alumno «cirujano»)
 const arreglar = (s) => {

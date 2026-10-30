@@ -4,6 +4,7 @@ import { testsRetosDiarios } from './seeds/retosDiarios';
 import { misionesIniciales } from './seeds/misiones';
 import { retosBomba, retosLengua, retosCamara, retosImpostor, retosNebulosa, retosRadio, retosColonia, RetoSemilla } from './seeds/retos';
 import { ejerciciosRevisados, solucionArbolBinario } from './seeds/ejercicios';
+import { retosDiariosNuevos } from './seeds/retosDiariosNuevos';
 
 /*
  * Migraciones de la base de datos.
@@ -210,7 +211,60 @@ const migraciones: Migracion[] = [
     id: '020_repaso_ejercicios',
     run: revisarEjercicios,
   },
+  {
+    // Fase 7: los 3 retos diarios estaban copiados 3 veces (el mismo reto daba puntos cada vez que
+    // volvía). Se queda la copia más antigua de cada uno y se añaden 2 retos nuevos.
+    id: '021_retos_diarios',
+    run: async (conn) => {
+      await quitarRetosDiariosRepetidos(conn);
+      await sembrarRetosDiarios(conn);
+    },
+  },
 ];
+
+// Antes de borrar una copia, su progreso pasa a la que se queda: completadas (si el alumno tenía las dos,
+// cuenta una), intentos, pistas y sabotajes. Los puntos ya ganados no se tocan.
+async function quitarRetosDiariosRepetidos(conn: any) {
+  const [filas] = await conn.query(
+    `SELECT t.id, TRIM(t.titulo) AS titulo FROM tareas t JOIN categorias c ON t.categoria_id = c.id
+     WHERE c.nombre = 'Reto Diario' AND t.tipo = 'codigo' ORDER BY t.id`
+  ) as any[];
+  const primera = new Map<string, number>();
+  for (const { id, titulo } of filas as any[]) {
+    const queda = primera.get(titulo);
+    if (queda === undefined) { primera.set(titulo, id); continue; }
+    await conn.query('UPDATE IGNORE tareas_usuarios SET tarea_id = ? WHERE tarea_id = ?', [queda, id]);
+    await conn.query('DELETE FROM tareas_usuarios WHERE tarea_id = ?', [id]);
+    await conn.query('UPDATE intentos SET tarea_id = ? WHERE tarea_id = ?', [queda, id]);
+    await conn.query('UPDATE pistas_ia SET tarea_id = ? WHERE tarea_id = ?', [queda, id]);
+    await conn.query('UPDATE IGNORE sabotajes SET tarea_original_id = ? WHERE tarea_original_id = ?', [queda, id]);
+    await conn.query('DELETE FROM tareas WHERE id = ?', [id]);
+    console.log(`Reto diario repetido ${id} («${titulo}») unido al ${queda}`);
+  }
+}
+
+// Idempotente: no repite un reto que ya exista con el mismo título
+async function sembrarRetosDiarios(conn: any) {
+  const [cat] = await conn.query("SELECT id FROM categorias WHERE nombre = 'Reto Diario'") as any[];
+  const [niv] = await conn.query("SELECT id FROM niveles WHERE nombre = 'Reto Diario'") as any[];
+  if (!(cat as any[]).length || !(niv as any[]).length) return;
+  for (const r of retosDiariosNuevos) {
+    const [existe] = await conn.query('SELECT id FROM tareas WHERE titulo = ?', [r.titulo]) as any[];
+    if ((existe as any[]).length) continue;
+    const [res] = await conn.query(
+      `INSERT INTO tareas (categoria_id, nivel_id, titulo, descripcion, codigo_base, resultado_esperado, solucion, puntos_base, tipo)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 1000, 'codigo')`,
+      [(cat as any[])[0].id, (niv as any[])[0].id, r.titulo, r.descripcion, r.codigoBase, r.resultadoEsperado, r.solucion]
+    ) as any[];
+    for (const [orden, t] of r.tests.entries()) {
+      await conn.query(
+        `INSERT INTO tests_tarea (tarea_id, descripcion, codigo_test, salida_esperada, oculto, orden)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [(res as any).insertId, t.descripcion, t.codigo || null, t.salida, t.oculto ? 1 : 0, orden]
+      );
+    }
+  }
+}
 
 // Solo toca cada ejercicio si sigue teniendo su título original: si alguien lo ha cambiado a mano
 // desde el panel, se respeta y se avisa. Los tests solo se añaden si la tarea no tenía ninguno.
