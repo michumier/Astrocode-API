@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { gql, nuevoAlumno, enviar, retoPorTitulo, solucionTarea1 } from './helpers.mjs';
+import { gql, nuevoAlumno, enviar, retoPorTitulo, solucionTarea1, tareaSinTests } from './helpers.mjs';
 
 const SOLUCION_PARENTESIS = `def es_valido(cadena):
     pila = []
@@ -22,7 +22,7 @@ test('la antigua mutation completarTarea ya no existe', async () => {
   assert.ok(r.errors);
 });
 
-test('ejercicio clásico (sin tests): comparación de salida y puntos una sola vez', async () => {
+test('ejercicio de los planetas: se corrige con sus tests (fase 7) y puntúa una sola vez', async () => {
   const alumno = await nuevoAlumno();
   const base = (await gql(`{ tarea(id: 1){ codigoBase tipo } }`, {}, alumno.token)).data.tarea;
   assert.equal(base.tipo, 'codigo');
@@ -33,7 +33,9 @@ test('ejercicio clásico (sin tests): comparación de salida y puntos una sola v
 
   const bien = await enviar(alumno.token, 1, await solucionTarea1(alumno.token), 42);
   assert.equal(bien.correcto, true);
-  assert.equal(bien.tests, null);
+  // Fase 7: el ejercicio 1 tiene un test visible (salida completa) y uno oculto (la variable)
+  assert.equal(bien.tests.total, 2);
+  assert.equal(bien.tests.superados, 2);
   assert.ok(bien.puntos > 0);
 
   const otraVez = await enviar(alumno.token, 1, await solucionTarea1(alumno.token));
@@ -120,10 +122,11 @@ test('cada envío queda registrado con su tipo de error', async () => {
 
 test('errores de ejecución sin tests: NameError, Timeout y salida incorrecta', async () => {
   const alumno = await nuevoAlumno();
-  await enviar(alumno.token, 1, 'print(no_existe)');
-  await enviar(alumno.token, 1, 'while True: pass');
-  await enviar(alumno.token, 1, 'print("hola")');
-  const intentos = (await gql(MIS_INTENTOS, { id: '1' }, alumno.token)).data.misIntentos;
+  const id = await tareaSinTests();
+  await enviar(alumno.token, id, 'print(no_existe)');
+  await enviar(alumno.token, id, 'while True: pass');
+  await enviar(alumno.token, id, 'print("hola")');
+  const intentos = (await gql(MIS_INTENTOS, { id }, alumno.token)).data.misIntentos;
   assert.deepEqual(intentos.map((i) => i.tipoError), ['SalidaIncorrecta', 'Timeout', 'NameError']);
 });
 

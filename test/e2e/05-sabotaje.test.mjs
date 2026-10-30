@@ -1,7 +1,7 @@
 // Fase 1: misiones de sabotaje
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { gql, codigoError, nuevoAlumno, admin, enviar, ENVIAR_SOLUCION } from './helpers.mjs';
+import { gql, codigoError, nuevoAlumno, admin, enviar, ENVIAR_SOLUCION, tareaSinTests } from './helpers.mjs';
 
 const SOLUCION_PARENTESIS = `def es_valido(cadena):
     pila = []
@@ -45,13 +45,15 @@ test('tareasSaboteables: solo admin; incluye los retos con solución y tests', a
   const r = await gql('{ tareasSaboteables { id titulo tests } }', {}, A);
   const ids = r.data.tareasSaboteables.map((t) => t.id);
   for (const id of copias) assert.ok(ids.includes(id));
-  assert.ok(!ids.includes('1'), 'la tarea 1 no tiene solución ni tests');
+  // Fase 7: los ejercicios de los planetas ya tienen solución y tests, así que también se pueden sabotear
+  assert.ok(ids.includes('1'), 'la tarea 1 tiene solución y tests desde la fase 7');
+  assert.ok(!ids.includes(await tareaSinTests()), 'una tarea sin solución ni tests no se puede sabotear');
 });
 
 test('generar: solo admin y la tarea necesita solución y tests', async () => {
   const alumno = await nuevoAlumno();
   assert.equal(codigoError(await gql(GENERAR, { id: copias[0], n: 3 }, alumno.token)), 'FORBIDDEN');
-  const r = await gql(GENERAR, { id: '1', n: 3 }, A);
+  const r = await gql(GENERAR, { id: await tareaSinTests(), n: 3 }, A);
   assert.equal(codigoError(r), 'BAD_USER_INPUT');
 });
 

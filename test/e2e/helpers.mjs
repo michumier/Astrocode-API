@@ -82,5 +82,18 @@ export async function retoPorTitulo(token, titulo) {
 // Solución del ejercicio 1 (variables) a partir de su código base
 export async function solucionTarea1(token) {
   const r = await gql(`{ tarea(id: 1){ codigoBase } }`, {}, token);
-  return r.data.tarea.codigoBase.replace('# TODO: Declara la variable edad y asígnale el valor 25', 'edad = 25');
+  return r.data.tarea.codigoBase.replace('# TODO: crea la variable edad con el valor 25', 'edad = 25');
+}
+
+// Tarea «clásica» sin tests ni solución (se corrige comparando la salida). Desde la fase 7 los
+// ejercicios de la BD tienen tests, así que las pruebas que necesitan una la crean como admin.
+export async function tareaSinTests() {
+  const A = (await admin()).token;
+  const r = await gql(
+    `mutation($i:CrearTareaInput!){ crearTarea(input:$i){ id } }`,
+    { i: { categoriaId: '1', nivelId: '1', titulo: unico('Sin tests '), descripcion: 'Imprime hola mundo', codigoBase: '', resultadoEsperado: 'hola mundo' } },
+    A
+  );
+  if (r.errors) throw new Error(r.errors[0].message);
+  return r.data.crearTarea.id;
 }
