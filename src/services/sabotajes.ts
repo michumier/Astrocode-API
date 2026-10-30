@@ -80,7 +80,7 @@ export async function tareaSaboteable(tareaId: string | number) {
   const filas = await query(
     `SELECT t.id, t.titulo, t.descripcion, t.solucion, t.tipo, COUNT(tt.id) AS tests
      FROM tareas t LEFT JOIN tests_tarea tt ON tt.tarea_id = t.id
-     WHERE t.id = ? GROUP BY t.id`,
+     WHERE t.id = $1 GROUP BY t.id`,
     [tareaId]
   ) as any[];
   const tarea = filas[0];
@@ -111,7 +111,7 @@ export async function generarSabotajes(tareaId: string | number, cantidad: numbe
   const objetivo = Math.min(Math.max(Math.floor(cantidad), 1), 10);
 
   // Sabotajes que ya existen para esta tarea (para no repetirlos)
-  const existentes = new Set(((await query('SELECT hash FROM sabotajes WHERE tarea_original_id = ?', [tarea.id])) as any[]).map((f) => f.hash));
+  const existentes = new Set(((await query('SELECT hash FROM sabotajes WHERE tarea_original_id = $1', [tarea.id])) as any[]).map((f) => f.hash));
 
   const candidatos: Candidato[] = [];
 
@@ -148,16 +148,18 @@ export async function generarSabotajes(tareaId: string | number, cantidad: numbe
     const ev = await evaluarCodigo(tarea.id, c.codigo);
     if (!esSabotajeValido(ev)) continue;
 
-    const resultado = await query(
-      `INSERT IGNORE INTO sabotajes (tarea_original_id, codigo, hash, operador, descripcion, linea, lineas_cambiadas, diff,
+    const [nuevo] = await query(
+      `INSERT INTO sabotajes (tarea_original_id, codigo, hash, operador, descripcion, linea, lineas_cambiadas, diff,
                                      contexto, dificultad, tests_fallidos, tests_totales, origen)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+       ON CONFLICT (tarea_original_id, hash) DO NOTHING
+       RETURNING id`,
       [tarea.id, c.codigo, h, c.operador, c.descripcion, c.linea, c.lineasCambiadas, c.diff,
        c.contexto || contextoPorDefecto(c.operador, semilla + i), calcularDificultad(ev),
        ev.fallidosVisibles + ev.fallidosOcultos, ev.total, c.origen]
-    ) as any;
-    if (resultado.insertId) {
-      guardados.push(resultado.insertId);
+    );
+    if (nuevo) {
+      guardados.push(nuevo.id);
       existentes.add(h);
     }
   }
@@ -168,7 +170,7 @@ export async function generarSabotajes(tareaId: string | number, cantidad: numbe
 export async function publicarSabotaje(sabotajeId: string | number, contexto?: string | null): Promise<number> {
   const filas = await query(
     `SELECT s.*, t.categoria_id, t.nivel_id, t.titulo, t.descripcion, t.resultado_esperado, t.solucion, t.puntos_base
-     FROM sabotajes s JOIN tareas t ON t.id = s.tarea_original_id WHERE s.id = ?`,
+     FROM sabotajes s JOIN tareas t ON t.id = s.tarea_original_id WHERE s.id = $1`,
     [sabotajeId]
   ) as any[];
   const s = filas[0];
@@ -178,22 +180,23 @@ export async function publicarSabotaje(sabotajeId: string | number, contexto?: s
   const contextoFinal = (contexto && contexto.trim()) || s.contexto;
 
   return transaction(async (conn) => {
-    const [res] = await conn.execute(
+    const [nueva] = await conn.query(
       `INSERT INTO tareas (categoria_id, nivel_id, titulo, descripcion, codigo_base, resultado_esperado, solucion,
                            puntos_base, tipo, config)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'sabotaje', ?)`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'sabotaje', $9)
+       RETURNING id`,
       [s.categoria_id, s.nivel_id, `🕵️ Sabotaje: ${s.titulo}`, s.descripcion, s.codigo, s.resultado_esperado, s.solucion,
        s.puntos_base ?? null,
        JSON.stringify({ sabotajeId: s.id, tareaOriginalId: s.tarea_original_id, contexto: contextoFinal })]
-    ) as any;
-    const nuevaId = res.insertId;
+    );
+    const nuevaId: number = nueva.id;
 
-    await conn.execute(
+    await conn.query(
       `INSERT INTO tests_tarea (tarea_id, descripcion, codigo_test, entrada, salida_esperada, oculto, orden)
-       SELECT ?, descripcion, codigo_test, entrada, salida_esperada, oculto, orden FROM tests_tarea WHERE tarea_id = ?`,
+       SELECT $1, descripcion, codigo_test, entrada, salida_esperada, oculto, orden FROM tests_tarea WHERE tarea_id = $2`,
       [nuevaId, s.tarea_original_id]
     );
-    await conn.execute('UPDATE sabotajes SET tarea_id = ?, contexto = ? WHERE id = ?', [nuevaId, contextoFinal, s.id]);
+    await conn.query('UPDATE sabotajes SET tarea_id = $1, contexto = $2 WHERE id = $3', [nuevaId, contextoFinal, s.id]);
     return nuevaId;
   });
 }
@@ -205,14 +208,14 @@ export async function puedeAbrirTarea(usuario: any, tarea: { id: any; tipo?: str
   if (!usuario) return false;
   const config = typeof tarea.config === 'string' ? JSON.parse(tarea.config) : tarea.config || {};
   const filas = await query(
-    'SELECT 1 FROM tareas_usuarios WHERE usuario_id = ? AND tarea_id = ?',
+    'SELECT 1 FROM tareas_usuarios WHERE usuario_id = $1 AND tarea_id = $2',
     [usuario.id, config.tareaOriginalId]
   ) as any[];
   return filas.length > 0;
 }
 
 export async function sabotajePorTarea(tareaId: string | number) {
-  const filas = await query('SELECT * FROM sabotajes WHERE tarea_id = ?', [tareaId]) as any[];
+  const filas = await query('SELECT * FROM sabotajes WHERE tarea_id = $1', [tareaId]) as any[];
   return filas[0] || null;
 }
 

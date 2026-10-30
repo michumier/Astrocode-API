@@ -2,7 +2,7 @@
 # (astrocode-e2e), así que tiene su propia base de datos y no toca la de desarrollo.
 #   node test/e2e/docker.mjs
 services:
-  mysql-db:
+  postgres-db:
     container_name: !reset null
     ports: !reset []
   python-runner:

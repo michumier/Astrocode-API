@@ -1,9 +1,8 @@
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import { query } from '../../config/db';
+import { query, ejecutar, transaction } from '../../config/db';
 import { GraphQLError } from 'graphql';
 import { UserInputError, ForbiddenError, AuthenticationError, Context, requireAuth, requireAdmin, mismoId } from '../errors';
-import { transaction } from '../../config/db';
 import { emailsAdmin } from '../../db/migrations';
 
 interface Usuario {
@@ -92,7 +91,7 @@ export const getUsuarioFromToken = async (token: string): Promise<Usuario> => {
 
   const decoded = verifyToken(token);
   const usuarios = await query(
-    `SELECT ${CAMPOS_USUARIO} FROM usuarios WHERE id = ?`,
+    `SELECT ${CAMPOS_USUARIO} FROM usuarios WHERE id = $1`,
     [decoded.id]
   ) as Usuario[];
 
@@ -131,7 +130,7 @@ export const userResolvers = {
         throw new ForbiddenError('No puedes ver los datos de otro usuario');
       }
       const usuarios = await query(
-        `SELECT ${CAMPOS_USUARIO} FROM usuarios WHERE id = ?`,
+        `SELECT ${CAMPOS_USUARIO} FROM usuarios WHERE id = $1`,
         [id]
       ) as Usuario[];
       return usuarios.length ? formatUsuarioFechas(usuarios[0]) : null;
@@ -141,7 +140,7 @@ export const userResolvers = {
     usuarioPorEmail: async (_: any, { correo_electronico }: { correo_electronico: string }, context: Context): Promise<Usuario | null> => {
       requireAdmin(context);
       const usuarios = await query(
-        `SELECT ${CAMPOS_USUARIO} FROM usuarios WHERE correo_electronico = ?`,
+        `SELECT ${CAMPOS_USUARIO} FROM usuarios WHERE lower(correo_electronico) = lower($1)`,
         [correo_electronico]
       ) as Usuario[];
       return usuarios.length ? formatUsuarioFechas(usuarios[0]) : null;
@@ -161,7 +160,7 @@ export const userResolvers = {
       }
       // Obtener puntos del usuario
       const usuarios = await query(
-        'SELECT puntos FROM usuarios WHERE id = ?',
+        'SELECT puntos FROM usuarios WHERE id = $1',
         [context.user.id]
       ) as { puntos: number }[];
       const puntos = usuarios.length ? usuarios[0].puntos : 0;
@@ -176,7 +175,7 @@ export const userResolvers = {
            FROM tareas t 
            JOIN tareas_usuarios tu ON t.id = tu.tarea_id
            JOIN niveles n ON t.nivel_id = n.id
-           WHERE tu.usuario_id = ?
+           WHERE tu.usuario_id = $1
            ORDER BY tu.completado_el DESC`
         , [usuarioId]) as any[];
         
@@ -213,7 +212,7 @@ export const userResolvers = {
       try {
         // Verificar si el usuario ya existe
         const usuarioExistente = await query(
-          'SELECT id FROM usuarios WHERE correo_electronico = ? OR nombre_usuario = ?',
+          'SELECT id FROM usuarios WHERE lower(correo_electronico) = lower($1) OR lower(nombre_usuario) = lower($2)',
           [input.correo_electronico, input.nombre_usuario]
         ) as any[];
 
@@ -224,21 +223,16 @@ export const userResolvers = {
         // Hash de la contraseña
         const contrasenaHash = await bcrypt.hash(input.contrasena, 12);
 
-        // Insertar nuevo usuario
-        const resultado = await query(
-          `INSERT INTO usuarios (nombre_usuario, correo_electronico, contrasena_hash, nombre_completo, puntos, rol)
-           VALUES (?, ?, ?, ?, 0, ?)`,
-          [input.nombre_usuario, input.correo_electronico, contrasenaHash, input.nombre_completo || null,
-           emailsAdmin().includes(input.correo_electronico) ? 'admin' : 'alumno']
-        ) as any;
-
-        // Obtener el usuario creado
+        // Insertar nuevo usuario y devolverlo
         const usuarios = await query(
-          `SELECT ${CAMPOS_USUARIO} FROM usuarios WHERE id = ?`,
-          [resultado.insertId]
+          `INSERT INTO usuarios (nombre_usuario, correo_electronico, contrasena_hash, nombre_completo, puntos, rol)
+           VALUES ($1, $2, $3, $4, 0, $5)
+           RETURNING ${CAMPOS_USUARIO}`,
+          [input.nombre_usuario, input.correo_electronico, contrasenaHash, input.nombre_completo || null,
+           emailsAdmin().includes(input.correo_electronico.toLowerCase()) ? 'admin' : 'alumno']
         ) as Usuario[];
 
-        return usuarios[0];
+        return formatUsuarioFechas(usuarios[0]);
       } catch (error) {
         if (error instanceof GraphQLError) {
           throw error;
@@ -262,7 +256,7 @@ export const userResolvers = {
 
         // Verificar que el usuario a actualizar existe
         const usuarioExistente = await query(
-          'SELECT id FROM usuarios WHERE id = ?',
+          'SELECT id FROM usuarios WHERE id = $1',
           [id]
         ) as any[];
 
@@ -276,18 +270,18 @@ export const userResolvers = {
           const parametros: any[] = [];
           
           if (input.nombre_usuario) {
-            condiciones.push('nombre_usuario = ?');
             parametros.push(input.nombre_usuario);
+            condiciones.push(`lower(nombre_usuario) = lower($${parametros.length})`);
           }
           if (input.correo_electronico) {
-            condiciones.push('correo_electronico = ?');
             parametros.push(input.correo_electronico);
+            condiciones.push(`lower(correo_electronico) = lower($${parametros.length})`);
           }
           
           parametros.push(id);
           
           const conflictos = await query(
-            `SELECT id FROM usuarios WHERE (${condiciones.join(' OR ')}) AND id != ?`,
+            `SELECT id FROM usuarios WHERE (${condiciones.join(' OR ')}) AND id != $${parametros.length}`,
             parametros
           ) as any[];
 
@@ -301,16 +295,16 @@ export const userResolvers = {
         const valores: any[] = [];
         
         if (input.nombre_usuario) {
-          campos.push('nombre_usuario = ?');
           valores.push(input.nombre_usuario);
+          campos.push(`nombre_usuario = $${valores.length}`);
         }
         if (input.correo_electronico) {
-          campos.push('correo_electronico = ?');
           valores.push(input.correo_electronico);
+          campos.push(`correo_electronico = $${valores.length}`);
         }
         if (input.nombre_completo !== undefined) {
-          campos.push('nombre_completo = ?');
           valores.push(input.nombre_completo);
+          campos.push(`nombre_completo = $${valores.length}`);
         }
 
         if (campos.length === 0) {
@@ -319,18 +313,18 @@ export const userResolvers = {
 
         valores.push(id);
 
-        const resultado = await query(
-          `UPDATE usuarios SET ${campos.join(', ')} WHERE id = ?`,
+        const cambiadas = await ejecutar(
+          `UPDATE usuarios SET ${campos.join(', ')} WHERE id = $${valores.length}`,
           valores
-        ) as any;
+        );
 
-        if (resultado.affectedRows === 0) {
+        if (cambiadas === 0) {
           throw new Error('No se pudo actualizar el usuario');
         }
 
         // Obtener el usuario actualizado
         const usuarios = await query(
-          `SELECT ${CAMPOS_USUARIO} FROM usuarios WHERE id = ?`,
+          `SELECT ${CAMPOS_USUARIO} FROM usuarios WHERE id = $1`,
           [id]
         ) as Usuario[];
 
@@ -338,7 +332,7 @@ export const userResolvers = {
           throw new Error('Error al obtener el usuario actualizado');
         }
 
-        return usuarios[0];
+        return formatUsuarioFechas(usuarios[0]);
       } catch (error) {
         if (error instanceof GraphQLError) {
           throw error;
@@ -363,10 +357,9 @@ export const userResolvers = {
 
         // Borrar primero los datos que dependen del usuario (claves foráneas)
         return await transaction(async (conn) => {
-          await conn.execute('DELETE FROM tareas_usuarios WHERE usuario_id = ?', [id]);
-          await conn.execute('DELETE FROM insignias_usuarios WHERE usuario_id = ?', [id]);
-          const [resultado] = await conn.execute('DELETE FROM usuarios WHERE id = ?', [id]) as any;
-          return resultado.affectedRows > 0;
+          await conn.ejecutar('DELETE FROM tareas_usuarios WHERE usuario_id = $1', [id]);
+          await conn.ejecutar('DELETE FROM insignias_usuarios WHERE usuario_id = $1', [id]);
+          return (await conn.ejecutar('DELETE FROM usuarios WHERE id = $1', [id])) > 0;
         });
       } catch (error) {
         if (error instanceof GraphQLError) {
@@ -381,7 +374,7 @@ export const userResolvers = {
       try {
         // Buscar usuario por email
         const usuarios = await query(
-          `SELECT ${CAMPOS_USUARIO}, contrasena_hash FROM usuarios WHERE correo_electronico = ?`,
+          `SELECT ${CAMPOS_USUARIO}, contrasena_hash FROM usuarios WHERE lower(correo_electronico) = lower($1)`,
           [input.correo_electronico]
         ) as any[];
 
@@ -434,7 +427,7 @@ export const userResolvers = {
 
         // Obtener hash actual
         const usuarios = await query(
-          'SELECT contrasena_hash FROM usuarios WHERE id = ?',
+          'SELECT contrasena_hash FROM usuarios WHERE id = $1',
           [id]
         ) as any[];
 
@@ -454,12 +447,7 @@ export const userResolvers = {
         const nuevoHash = await bcrypt.hash(nuevaContrasena, 12);
 
         // Actualizar contraseña
-        const resultado = await query(
-          'UPDATE usuarios SET contrasena_hash = ? WHERE id = ?',
-          [nuevoHash, id]
-        ) as any;
-
-        return resultado.affectedRows > 0;
+        return (await ejecutar('UPDATE usuarios SET contrasena_hash = $1 WHERE id = $2', [nuevoHash, id])) > 0;
       } catch (error) {
         if (error instanceof GraphQLError) {
           throw error;
@@ -473,7 +461,7 @@ export const userResolvers = {
         throw new AuthenticationError('Debes estar autenticado para registrar el click');
       }
       // Aquí podrías registrar el click en la base de datos si lo deseas
-      // await query('INSERT INTO clicks_recursos (usuario_id, recurso_id, fecha) VALUES (?, ?, NOW())', [context.user.id, recursoId]);
+      // await query('INSERT INTO clicks_recursos (usuario_id, recurso_id, fecha) VALUES ($1, $2, NOW())', [context.user.id, recursoId]);
       return {
         exito: true,
         mensaje: `Click registrado para recurso ${recursoId}`

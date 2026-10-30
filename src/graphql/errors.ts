@@ -41,5 +41,5 @@ export const requireAdmin = (context: Context) => {
   return user;
 };
 
-// Los IDs llegan como string desde GraphQL y como number desde MySQL
+// Los IDs llegan como string desde GraphQL y como number desde la BD
 export const mismoId = (a: string | number, b: string | number) => String(a) === String(b);

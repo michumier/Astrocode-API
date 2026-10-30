@@ -1,4 +1,4 @@
-import { query } from '../../config/db';
+import { query, ejecutar } from '../../config/db';
 import { Context, requireAuth, requireAdmin, UserInputError } from '../errors';
 import { generarSabotajes, publicarSabotaje } from '../../services/sabotajes';
 
@@ -35,21 +35,23 @@ export const sabotajeResolvers = {
     tareasSaboteables: async (_: any, __: any, context: Context) => {
       requireAdmin(context);
       const filas = await query(
-        `SELECT t.id, t.titulo,
-                (SELECT COUNT(*) FROM tests_tarea tt WHERE tt.tarea_id = t.id) AS tests,
-                (SELECT COUNT(*) FROM sabotajes s WHERE s.tarea_original_id = t.id) AS sabotajes,
-                (SELECT COUNT(*) FROM sabotajes s WHERE s.tarea_original_id = t.id AND s.tarea_id IS NOT NULL) AS publicados
-         FROM tareas t
-         WHERE t.tipo = 'codigo' AND t.solucion IS NOT NULL AND t.solucion <> ''
-         HAVING tests >= 2
-         ORDER BY t.titulo`
+        `SELECT * FROM (
+           SELECT t.id, t.titulo,
+                  (SELECT COUNT(*) FROM tests_tarea tt WHERE tt.tarea_id = t.id) AS tests,
+                  (SELECT COUNT(*) FROM sabotajes s WHERE s.tarea_original_id = t.id) AS sabotajes,
+                  (SELECT COUNT(*) FROM sabotajes s WHERE s.tarea_original_id = t.id AND s.tarea_id IS NOT NULL) AS publicados
+           FROM tareas t
+           WHERE t.tipo = 'codigo' AND t.solucion IS NOT NULL AND t.solucion <> ''
+         ) saboteables
+         WHERE tests >= 2
+         ORDER BY titulo`
       ) as any[];
       return filas.map((f) => ({ ...f, tests: Number(f.tests), sabotajes: Number(f.sabotajes), publicados: Number(f.publicados) }));
     },
 
     sabotajesDeTarea: async (_: any, { tareaId }: { tareaId: string }, context: Context) => {
       requireAdmin(context);
-      const filas = await query('SELECT * FROM sabotajes WHERE tarea_original_id = ? ORDER BY id DESC', [tareaId]) as any[];
+      const filas = await query('SELECT * FROM sabotajes WHERE tarea_original_id = $1 ORDER BY id DESC', [tareaId]) as any[];
       return filas.map(mapSabotaje);
     },
 
@@ -57,13 +59,13 @@ export const sabotajeResolvers = {
       const usuario = requireAuth(context);
       const filas = await query(
         `SELECT s.tarea_id, t.titulo, s.contexto, s.dificultad, o.titulo AS original_titulo,
-                EXISTS(SELECT 1 FROM tareas_usuarios tu WHERE tu.usuario_id = ? AND tu.tarea_id = s.tarea_original_id) AS desbloqueado,
-                EXISTS(SELECT 1 FROM tareas_usuarios tu WHERE tu.usuario_id = ? AND tu.tarea_id = s.tarea_id) AS completada
+                EXISTS(SELECT 1 FROM tareas_usuarios tu WHERE tu.usuario_id = $1 AND tu.tarea_id = s.tarea_original_id) AS desbloqueado,
+                EXISTS(SELECT 1 FROM tareas_usuarios tu WHERE tu.usuario_id = $2 AND tu.tarea_id = s.tarea_id) AS completada
          FROM sabotajes s
          JOIN tareas t ON t.id = s.tarea_id
          JOIN tareas o ON o.id = s.tarea_original_id
          WHERE s.tarea_id IS NOT NULL
-         ORDER BY completada ASC, FIELD(s.dificultad, 'facil', 'media', 'dificil'), s.id`,
+         ORDER BY completada ASC, COALESCE(array_position(ARRAY['facil', 'media', 'dificil'], s.dificultad::text), 0), s.id`,
         [usuario.id, usuario.id]
       ) as any[];
       const disponibles = filas.filter((f) => f.desbloqueado);
@@ -90,7 +92,7 @@ export const sabotajeResolvers = {
       requireAdmin(context);
       const ids = await comoErrorDeUsuario(() => generarSabotajes(tareaId, cantidad, usarIa));
       if (ids.length === 0) return [];
-      const filas = await query(`SELECT * FROM sabotajes WHERE id IN (${ids.map(() => '?').join(',')}) ORDER BY id`, ids) as any[];
+      const filas = await query('SELECT * FROM sabotajes WHERE id = ANY($1) ORDER BY id', [ids]) as any[];
       return filas.map(mapSabotaje);
     },
 
@@ -99,7 +101,7 @@ export const sabotajeResolvers = {
       const tareaId = await comoErrorDeUsuario(() => publicarSabotaje(id, contexto));
       const filas = await query(
         `SELECT id, categoria_id, nivel_id, titulo, descripcion, puntos_base, puntos_bonus, codigo_base,
-                resultado_esperado, tipo, config FROM tareas WHERE id = ?`,
+                resultado_esperado, tipo, config FROM tareas WHERE id = $1`,
         [tareaId]
       ) as any[];
       const t = filas[0];
@@ -108,8 +110,7 @@ export const sabotajeResolvers = {
 
     descartarSabotaje: async (_: any, { id }: { id: string }, context: Context) => {
       requireAdmin(context);
-      const r = await query('DELETE FROM sabotajes WHERE id = ? AND tarea_id IS NULL', [id]) as any;
-      if (r.affectedRows === 0) {
+      if ((await ejecutar('DELETE FROM sabotajes WHERE id = $1 AND tarea_id IS NULL', [id])) === 0) {
         throw new UserInputError('No existe o ya está publicado (los publicados no se descartan)');
       }
       return true;

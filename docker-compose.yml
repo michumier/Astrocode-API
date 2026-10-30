@@ -1,20 +1,21 @@
 # Las contraseñas y secretos se leen del archivo .env (copia .env.example a .env)
 
 services:
-  # Base de datos MySQL
-  mysql-db:
-    image: mysql:8.0
-    container_name: astrocode-mysql
+  # Base de datos Postgres (la misma versión que Supabase). El esquema lo crea la API al arrancar
+  # (src/db/migrations.ts), así que aquí la base de datos empieza vacía.
+  postgres-db:
+    image: postgres:17-alpine
+    container_name: astrocode-postgres
     environment:
-      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:?Define DB_PASSWORD en el .env}
-      MYSQL_DATABASE: ${DB_NAME:-astrocodebd}
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Define DB_PASSWORD en el .env}
+      POSTGRES_DB: ${DB_NAME:-astrocodebd}
     ports:
-      - "127.0.0.1:3307:3306" # solo accesible desde tu PC (MySQL Workbench, etc.)
+      - "127.0.0.1:5433:5432" # solo accesible desde tu PC (DBeaver, psql, etc.)
     volumes:
-      - mysql_data:/var/lib/mysql
-      - ./src/db:/docker-entrypoint-initdb.d
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 30
@@ -23,7 +24,7 @@ services:
       - backend
 
   # Contenedor aislado para ejecutar el código Python de los alumnos:
-  # sin internet, sin acceso a MySQL, solo lectura, sin privilegios y con límites
+  # sin internet, sin acceso a la base de datos, solo lectura, sin privilegios y con límites
   python-runner:
     build:
       context: ./python-runner
@@ -56,9 +57,9 @@ services:
     environment:
       - NODE_ENV=development
       - PORT=4000
-      - DB_HOST=mysql-db
-      - DB_PORT=3306
-      - DB_USER=root
+      - DB_HOST=postgres-db
+      - DB_PORT=5432
+      - DB_USER=postgres
       - DB_NAME=${DB_NAME:-astrocodebd}
       - PYTHON_RUNNER_URL=http://python-runner:5000
       - CORS_ORIGIN=http://localhost:3000
@@ -69,7 +70,7 @@ services:
       retries: 30
       start_period: 20s
     depends_on:
-      mysql-db:
+      postgres-db:
         condition: service_healthy
       python-runner:
         condition: service_started
@@ -112,4 +113,4 @@ networks:
     internal: true
 
 volumes:
-  mysql_data:
+  postgres_data:

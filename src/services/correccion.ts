@@ -31,7 +31,7 @@ export async function corregirTarea(tarea: any, codigo: string): Promise<Correcc
   const ejecucion = await ejecutarPython(codigo);
 
   const tests = await query(
-    'SELECT descripcion, codigo_test, entrada, salida_esperada, oculto FROM tests_tarea WHERE tarea_id = ? ORDER BY orden, id',
+    'SELECT descripcion, codigo_test, entrada, salida_esperada, oculto FROM tests_tarea WHERE tarea_id = $1 ORDER BY orden, id',
     [tarea.id]
   ) as any[];
 
@@ -108,7 +108,7 @@ export interface Evaluacion {
  */
 export async function evaluarCodigo(tareaId: string | number, codigo: string): Promise<Evaluacion> {
   const tests = await query(
-    'SELECT codigo_test, entrada, salida_esperada, oculto FROM tests_tarea WHERE tarea_id = ? ORDER BY orden, id',
+    'SELECT codigo_test, entrada, salida_esperada, oculto FROM tests_tarea WHERE tarea_id = $1 ORDER BY orden, id',
     [tareaId]
   ) as any[];
 

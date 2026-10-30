@@ -1,4 +1,4 @@
-import { query } from '../../config/db';
+import { query, INICIO_DIA_UTC } from '../../config/db';
 import { Context, requireAuth, requireAdmin, UserInputError, ForbiddenError } from '../errors';
 import { iaDisponible, generarPista, generarEjercicio, EjercicioIA } from '../../services/ia';
 import { ejecutarPython, normalizarSalida } from '../../services/pythonRunner';
@@ -25,7 +25,7 @@ export const iaResolvers = {
     pistasRestantesHoy: async (_: any, __: any, context: Context) => {
       const usuario = requireAuth(context);
       const filas = await query(
-        'SELECT COUNT(*) AS usadas FROM pistas_ia WHERE usuario_id = ? AND creado_el >= UTC_DATE()',
+        `SELECT COUNT(*) AS usadas FROM pistas_ia WHERE usuario_id = $1 AND creado_el >= ${INICIO_DIA_UTC}`,
         [usuario.id]
       ) as any[];
       return Math.max(0, PISTAS_POR_DIA - Number(filas[0].usadas));
@@ -43,14 +43,14 @@ export const iaResolvers = {
       comprobarIa();
 
       const usadas = await query(
-        'SELECT COUNT(*) AS usadas FROM pistas_ia WHERE usuario_id = ? AND creado_el >= UTC_DATE()',
+        `SELECT COUNT(*) AS usadas FROM pistas_ia WHERE usuario_id = $1 AND creado_el >= ${INICIO_DIA_UTC}`,
         [usuario.id]
       ) as any[];
       if (Number(usadas[0].usadas) >= PISTAS_POR_DIA) {
         throw new ForbiddenError(`Has usado tus ${PISTAS_POR_DIA} pistas de hoy. ¡Mañana tendrás más!`);
       }
 
-      const tareas = await query('SELECT id, titulo, descripcion, solucion, tipo, config FROM tareas WHERE id = ?', [tareaId]) as any[];
+      const tareas = await query('SELECT id, titulo, descripcion, solucion, tipo, config FROM tareas WHERE id = $1', [tareaId]) as any[];
       if (tareas.length === 0) {
         throw new UserInputError('Tarea no encontrada');
       }
@@ -63,7 +63,7 @@ export const iaResolvers = {
 
       // Tests visibles, para que la IA sepa qué se espera
       const tests = await query(
-        'SELECT descripcion, salida_esperada FROM tests_tarea WHERE tarea_id = ? AND oculto = 0 ORDER BY orden',
+        'SELECT descripcion, salida_esperada FROM tests_tarea WHERE tarea_id = $1 AND NOT oculto ORDER BY orden',
         [tareaId]
       ) as any[];
 
@@ -81,7 +81,7 @@ export const iaResolvers = {
         variante: tarea.tipo === 'reto' ? configTarea?.escenarios?.[0]?.params?.variante ?? null : null,
       });
 
-      await query('INSERT INTO pistas_ia (usuario_id, tarea_id) VALUES (?, ?)', [usuario.id, tareaId]);
+      await query('INSERT INTO pistas_ia (usuario_id, tarea_id) VALUES ($1, $2)', [usuario.id, tareaId]);
       return {
         pista,
         nivel: Math.min(Math.max(Math.floor(nivel), 1), 3),
@@ -100,8 +100,8 @@ export const iaResolvers = {
       requireAdmin(context);
       comprobarIa();
 
-      const niveles = await query('SELECT nombre FROM niveles WHERE id = ?', [nivelId]) as any[];
-      const categorias = await query('SELECT nombre FROM categorias WHERE id = ?', [categoriaId]) as any[];
+      const niveles = await query('SELECT nombre FROM niveles WHERE id = $1', [nivelId]) as any[];
+      const categorias = await query('SELECT nombre FROM categorias WHERE id = $1', [categoriaId]) as any[];
       if (!niveles.length || !categorias.length) {
         throw new UserInputError('Nivel o categoría no válidos');
       }
