@@ -388,6 +388,18 @@ Llevar la web «a otro nivel» sin tocar lo que la identifica: **el sistema sola
 
 ---
 
+## Fase 7 — 🧹 Repaso de los ejercicios
+
+Revisión completa de los ejercicios guardados en la base de datos: enunciados, código base, resultado esperado, soluciones y tests. Se hace con una migración (020), sin borrar nada ni cambiar ids, así que el progreso de los alumnos se conserva.
+
+### Tareas
+- [x] 7.1 Diagnóstico: volcado de las 50 tareas y prueba de cada una con una solución correcta, con el código base y con la «trampa» de copiar la salida (M)
+- [x] 7.2 Reescribir los 19 ejercicios de código de los planetas con enunciado claro, código base válido, solución de referencia y tests (visibles y ocultos); arreglar la solución del árbol binario (M)
+- [x] 7.3 Solucionario por planetas para probar el desbloqueo (fuera del repositorio) y recorrido automático Mercurio → Venus → Tierra (S) — pruebas en `docs/pruebas/fase-7.md`
+- [x] 7.4 Retos diarios: quitar las copias repetidas (moviendo su progreso a la que se queda) y añadir 2 retos nuevos; el reto del día rota entre 5 (S)
+
+---
+
 ## Reglas para todas las fases
 - **Rama `feature/` por fase** (`feature/fase-1-sabotaje`…) en cada repo afectado. Claude prepara la PR y Miguel revisa y fusiona.
 - **Plan de pruebas obligatorio al terminar cada fase** (`docs/pruebas/fase-N.md` en la API): pruebas automáticas y manuales con su resultado. **No se pasa a la siguiente fase sin ejecutarlo entero en verde.**
