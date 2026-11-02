@@ -8,7 +8,7 @@ import subprocess
 import sys
 import tempfile
 
-from sandbox import creador_de_limites, entorno_limpio
+from sandbox import creador_de_limites, entorno_limpio, comando
 
 HARNESS = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'trazador_harness.py')
 MAX_PASOS = int(os.environ.get('TRAZA_MAX_PASOS', '1000'))
@@ -28,8 +28,8 @@ def trazar(codigo, entrada='', codigo_test=None, max_pasos=MAX_PASOS):
                 f.write(contenido)
         try:
             proceso = subprocess.run(
-                [sys.executable, '-I', '-B', HARNESS, rutas['main.py'], rutas.get('test.py', ''),
-                 rutas['entrada.txt'], str(max_pasos)],
+                comando(HARNESS, rutas['main.py'], rutas.get('test.py', ''),
+                        rutas['entrada.txt'], str(max_pasos)),
                 capture_output=True, timeout=TIEMPO_MAXIMO, cwd=directorio,
                 env=entorno_limpio(directorio), preexec_fn=creador_de_limites(CPU_MAXIMA),
             )

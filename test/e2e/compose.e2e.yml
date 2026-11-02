@@ -7,6 +7,9 @@ services:
     ports: !reset []
   python-runner:
     container_name: !reset null
+    environment:
+      # Igual que en Vercel: el runner solo atiende a quien envíe este token (la API)
+      - RUNNER_TOKEN=token-e2e
   astrocode-api:
     container_name: !reset null
     ports: !override
@@ -19,6 +22,7 @@ services:
       - RATE_LIMIT_PER_MIN=5000
       # Retos de calibración del motor (fase 5.0)
       - RETOS_DE_PRUEBA=1
+      - RUNNER_TOKEN=token-e2e
     depends_on:
       mock-ia:
         condition: service_started

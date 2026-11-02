@@ -15,6 +15,12 @@ export interface ExecutionResult {
 // URL del contenedor Docker local (usando nombre del servicio)
 const PYTHON_RUNNER_URL = process.env.PYTHON_RUNNER_URL || 'http://python-runner:5000';
 
+// En la nube el runner tiene URL pública: solo atiende a quien envíe RUNNER_TOKEN (la API)
+const CABECERAS: Record<string, string> = {
+  'Content-Type': 'application/json',
+  ...(process.env.RUNNER_TOKEN ? { Authorization: `Bearer ${process.env.RUNNER_TOKEN}` } : {}),
+};
+
 // Límite de tamaño del código para no saturar el runner
 const MAX_CODE_LENGTH = 20000;
 
@@ -29,7 +35,7 @@ export async function ejecutarPython(sourceCode: string, stdin = ''): Promise<Ex
     const response = await axios.post(
       `${PYTHON_RUNNER_URL}/run`,
       { code: sourceCode, stdin },
-      { headers: { 'Content-Type': 'application/json' }, timeout: 10000 }
+      { headers: CABECERAS, timeout: 10000 }
     );
 
     const result = response.data;
@@ -77,7 +83,7 @@ export async function mutarCodigo(codigo: string, max = 12, semilla = 0): Promis
     const { data } = await axios.post(
       `${PYTHON_RUNNER_URL}/mutate`,
       { code: codigo, max, semilla },
-      { headers: { 'Content-Type': 'application/json' }, timeout: 10000 }
+      { headers: CABECERAS, timeout: 10000 }
     );
     return data.variantes || [];
   } catch (error: any) {
@@ -115,7 +121,7 @@ export async function ejecutarMision(codigo: string, mision: string, escenarios:
     const { data } = await axios.post(
       `${PYTHON_RUNNER_URL}/mision`,
       { code: codigo, mision, escenarios },
-      { headers: { 'Content-Type': 'application/json' }, timeout: 90000 }
+      { headers: CABECERAS, timeout: 90000 }
     );
     return data.resultados;
   } catch (error: any) {
@@ -135,7 +141,7 @@ export async function materialReto(mision: string, escenarios: EscenarioMision[]
     const { data } = await axios.post(
       `${PYTHON_RUNNER_URL}/reto/material`,
       { mision, escenarios },
-      { headers: { 'Content-Type': 'application/json' }, timeout: 15000 }
+      { headers: CABECERAS, timeout: 15000 }
     );
     return data;
   } catch (error: any) {
@@ -159,7 +165,7 @@ export async function trazarCodigo(codigo: string, stdin = '', test: string | nu
     const { data } = await axios.post(
       `${PYTHON_RUNNER_URL}/trace`,
       { code: codigo, stdin, test },
-      { headers: { 'Content-Type': 'application/json' }, timeout: 20000, maxContentLength: 5_000_000 }
+      { headers: CABECERAS, timeout: 20000, maxContentLength: 5_000_000 }
     );
     return data;
   } catch (error: any) {

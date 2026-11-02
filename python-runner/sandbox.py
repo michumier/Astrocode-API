@@ -2,6 +2,7 @@
 """Límites que se aplican a cualquier proceso que ejecute código de un alumno."""
 
 import os
+import sys
 
 try:
     import resource  # solo existe en Linux (dentro del contenedor)
@@ -10,6 +11,15 @@ except ImportError:  # pragma: no cover - en Windows no hay límites (solo para 
 
 TIMEOUT_SEGUNDOS = int(os.environ.get('RUNNER_TIMEOUT', '5'))
 MEMORIA_MAX_MB = int(os.environ.get('RUNNER_MEMORY_MB', '256'))
+
+
+# Todo el código de los alumnos se lanza a través de aislador.py (ver su cabecera)
+AISLADOR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'aislador.py')
+
+
+def comando(script, *argumentos):
+    """Línea de comandos para ejecutar un script con código del alumno: -I (modo aislado), -B (sin .pyc)."""
+    return [sys.executable, '-I', '-B', AISLADOR, script, *argumentos]
 
 
 def entorno_limpio(directorio):
