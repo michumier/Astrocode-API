@@ -15,7 +15,7 @@ test('ejecuta código normal', async () => {
   assert.equal(x.stdout.trim(), '6');
 });
 
-test('el runner no llega a MySQL', async () => {
+test('el runner no llega a la base de datos', async () => {
   const x = await ejecutar(T, 'import socket\ntry:\n  socket.create_connection(("postgres-db",5432),timeout=2); print("CONECTA")\nexcept Exception as e: print("BLOQUEADO")');
   assert.match(x.stdout, /BLOQUEADO/);
 });
@@ -48,4 +48,29 @@ test('fork bomb limitada y la API sigue viva', async () => {
   assert.match(x.stdout, /LIMITADO/);
   const r = await gql('{ hello }');
   assert.equal(r.data.hello, 'Hello World!');
+});
+
+// Capa del aislador (python-runner/aislador.py), la que protege en Vercel, donde no hay contenedor
+test('el aislador bloquea sockets, otros procesos, ctypes y /proc', async () => {
+  const x = await ejecutar(T, [
+    'import os, socket, subprocess',
+    'r = []',
+    'for f in (lambda: socket.socket(), lambda: subprocess.run(["id"]), lambda: os.system("id"), lambda: open("/proc/1/environ").read()):',
+    '    try:',
+    '        f(); r.append("SI")',
+    '    except PermissionError:',
+    '        r.append("NO")',
+    'try:',
+    '    import ctypes; r.append("SI")',
+    'except ImportError:',
+    '    r.append("NO")',
+    'print(",".join(r))',
+  ].join('\n'));
+  assert.equal(x.stdout.trim(), 'NO,NO,NO,NO,NO');
+});
+
+test('los errores del alumno se ven como siempre (sin rastro del aislador)', async () => {
+  const x = await ejecutar(T, 'a = 1\nprint(b)');
+  assert.match(x.stderr, /main\.py", line 2/);
+  assert.doesNotMatch(x.stderr, /aislador/);
 });

@@ -1,0 +1,10 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "regions": ["dub1"],
+  "functions": {
+    "src/index.ts": {
+      "maxDuration": 60,
+      "includeFiles": "src/db/*.sql"
+    }
+  }
+}

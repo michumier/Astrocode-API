@@ -342,15 +342,22 @@ export async function limpiarIntentosAntiguos() {
 const CANDADO_MIGRACIONES = 20261030;
 
 export async function aplicarMigraciones() {
-  await query(`
-    CREATE TABLE IF NOT EXISTS schema_migrations (
-      id VARCHAR(100) PRIMARY KEY,
-      aplicada_el TIMESTAMPTZ DEFAULT now()
-    )
-  `);
-  await query('ALTER TABLE schema_migrations ENABLE ROW LEVEL SECURITY');
+  const [registro] = await query("SELECT to_regclass('public.schema_migrations') AS tabla");
+  if (!registro.tabla) {
+    await query(`
+      CREATE TABLE IF NOT EXISTS schema_migrations (
+        id VARCHAR(100) PRIMARY KEY,
+        aplicada_el TIMESTAMPTZ DEFAULT now()
+      )
+    `);
+    await query('ALTER TABLE schema_migrations ENABLE ROW LEVEL SECURITY');
+  }
 
-  for (const migracion of migraciones) {
+  // Lo normal (y en cada arranque en frío de Vercel): ya están todas y basta con esta consulta
+  const yaAplicadas = new Set((await query('SELECT id FROM schema_migrations')).map((f) => f.id));
+  const pendientes = migraciones.filter((m) => !yaAplicadas.has(m.id));
+
+  for (const migracion of pendientes) {
     await transaction(async (conn) => {
       await conn.query('SELECT pg_advisory_xact_lock($1)', [CANDADO_MIGRACIONES]);
       const aplicada = await conn.query('SELECT 1 FROM schema_migrations WHERE id = $1', [migracion.id]);

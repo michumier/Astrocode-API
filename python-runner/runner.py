@@ -4,13 +4,17 @@
 Servidor Flask para ejecutar código Python de los alumnos.
 
 Capas de aislamiento:
-  - Contenedor sin red exterior, sin acceso a la BD, sistema de archivos de solo lectura
-    y usuario sin privilegios (ver Dockerfile y docker-compose.yml).
+  - En Docker: contenedor sin red exterior, sin acceso a la BD, sistema de archivos de solo lectura
+    y usuario sin privilegios (ver Dockerfile y docker-compose.yml). En Vercel: proyecto propio sin
+    ningún secreto salvo RUNNER_TOKEN.
+  - El código del alumno se lanza a través de aislador.py: sin red, sin otros procesos, sin ctypes
+    y sin /proc.
   - Cada ejecución corre en un proceso aparte con límites de CPU, memoria, procesos
     y tamaño de archivos (resource.setrlimit), en un directorio temporal propio
     y sin variables de entorno heredadas.
 """
 
+import hmac
 import os
 import shutil
 import subprocess
@@ -20,11 +24,24 @@ import tempfile
 from flask import Flask, jsonify, request
 
 from mutador import mutar
-from sandbox import TIMEOUT_SEGUNDOS, MEMORIA_MAX_MB, limitar_recursos, entorno_limpio
+from sandbox import TIMEOUT_SEGUNDOS, MEMORIA_MAX_MB, limitar_recursos, entorno_limpio, comando
 from misiones.motor import MISIONES, ejecutar_mision, material_reto
 from trazador import trazar
 
 app = Flask(__name__)
+
+# En la nube el runner tiene URL pública: con RUNNER_TOKEN solo atiende a la API (en Docker no hace falta,
+# porque no se publica ningún puerto). /health queda abierto para comprobar que está vivo.
+RUNNER_TOKEN = os.environ.get('RUNNER_TOKEN', '')
+
+
+@app.before_request
+def comprobar_token():
+    if not RUNNER_TOKEN or request.path == '/health':
+        return None
+    if not hmac.compare_digest(request.headers.get('Authorization', ''), f'Bearer {RUNNER_TOKEN}'):
+        return jsonify({'error': 'No autorizado'}), 401
+    return None
 
 MAX_CODIGO = 20_000          # caracteres
 MAX_SALIDA = 64 * 1024       # caracteres devueltos de stdout/stderr
@@ -59,7 +76,7 @@ def run_code():
 
         try:
             result = subprocess.run(
-                [sys.executable, '-I', '-B', ruta],  # -I: modo aislado, -B: sin .pyc
+                comando(ruta),
                 input=stdin,
                 capture_output=True,
                 text=True,

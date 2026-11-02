@@ -16,7 +16,7 @@ import sys
 import tempfile
 import time
 
-from sandbox import creador_de_limites, entorno_limpio
+from sandbox import creador_de_limites, entorno_limpio, comando
 from .base import AccionInvalida
 from .aterrizaje import Aterrizaje
 from .asteroides import Asteroides
@@ -51,7 +51,7 @@ class _Piloto:
         with open(ruta, 'w', encoding='utf-8') as f:
             f.write(codigo)
         self.proc = subprocess.Popen(
-            [sys.executable, '-I', '-B', HARNESS, ruta, funcion],
+            comando(HARNESS, ruta, funcion),
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
             cwd=self.dir, env=entorno_limpio(self.dir),
             preexec_fn=creador_de_limites(CPU_ESCENARIO),
