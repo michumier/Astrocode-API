@@ -400,11 +400,23 @@ Revisión completa de los ejercicios guardados en la base de datos: enunciados, 
 
 ---
 
+## Fase 8 — 🐘 De MySQL a Postgres
+
+Paso previo para desplegar gratis en Vercel + Supabase: la base de datos pasa a Postgres sin cambiar el comportamiento de la API. Se comprueba con las pruebas de siempre y comparando el contenido con el de MySQL.
+
+### Tareas
+- [x] 8.1 Esquema de Postgres (`esquema.sql`) con el estado final de las tablas y datos base convertidos del volcado de MySQL, sin los usuarios de prueba antiguos (M)
+- [x] 8.2 Conexión con `pg` y todas las consultas a Postgres: parámetros `$n`, `RETURNING`, `ON CONFLICT`, fechas en UTC, booleanos; usuario y correo sin distinguir mayúsculas como en MySQL (L)
+- [x] 8.3 Migraciones en transacción y con candado (dos arranques a la vez no las repiten) (S)
+- [x] 8.4 Docker, CI y pruebas sobre Postgres; regresión comparando ejercicios y tests con los de MySQL — pruebas en `docs/pruebas/fase-8.md` (M)
+
+---
+
 ## Reglas para todas las fases
 - **Rama `feature/` por fase** (`feature/fase-1-sabotaje`…) en cada repo afectado. Claude prepara la PR y Miguel revisa y fusiona.
 - **Plan de pruebas obligatorio al terminar cada fase** (`docs/pruebas/fase-N.md` en la API): pruebas automáticas y manuales con su resultado. **No se pasa a la siguiente fase sin ejecutarlo entero en verde.**
 - **Docker primero**: todo se prueba con `docker compose up --build`. Si el runner cambia, hay que reconstruir su imagen.
-- Migraciones numeradas a continuación de la 007, **solo aditivas**.
+- Migraciones numeradas a continuación de la última, **solo aditivas**.
 - Cada fase añade sus pruebas a `test/e2e` (RF-0.12) antes de darse por terminada.
 - La IA es **siempre opcional**: sin `NVIDIA_API_KEY` todo funciona, solo desaparecen los botones de IA.
 - La IA nunca decide puntos ni corrige: eso lo hacen los tests y la simulación.

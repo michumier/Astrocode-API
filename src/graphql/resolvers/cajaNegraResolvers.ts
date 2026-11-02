@@ -24,7 +24,7 @@ export const cajaNegraResolvers = {
       context: Context
     ) => {
       const usuario = requireAuth(context, 'Debes iniciar sesión para usar la caja negra');
-      const tareas = await query('SELECT id, tipo, config FROM tareas WHERE id = ?', [tareaId]) as any[];
+      const tareas = await query('SELECT id, tipo, config FROM tareas WHERE id = $1', [tareaId]) as any[];
       const tarea = tareas[0];
       if (!tarea) throw new UserInputError('Tarea no encontrada');
       if (tarea.tipo === 'pilotaje' || tarea.tipo === 'reto') throw new UserInputError('Las misiones y los retos tienen su propio visor');
@@ -32,7 +32,7 @@ export const cajaNegraResolvers = {
 
       // Solo los tests visibles: de los ocultos no se puede ver nada
       const visibles = await query(
-        'SELECT codigo_test, entrada FROM tests_tarea WHERE tarea_id = ? AND oculto = 0 ORDER BY orden, id',
+        'SELECT codigo_test, entrada FROM tests_tarea WHERE tarea_id = $1 AND NOT oculto ORDER BY orden, id',
         [tareaId]
       ) as any[];
       const test = visibles[Math.floor(indiceTest)];

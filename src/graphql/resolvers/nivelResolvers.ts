@@ -1,4 +1,4 @@
-import { query } from '../../config/db';
+import { query, ejecutar } from '../../config/db';
 import { GraphQLError } from 'graphql';
 import { UserInputError, Context, requireAdmin } from '../errors';
 
@@ -30,7 +30,7 @@ export const nivelResolvers = {
     // Obtener un nivel por ID
     nivel: async (_: any, { id }: { id: string }) => {
       try {
-        const result = await query('SELECT id, nombre, puntos, descripcion FROM niveles WHERE id = ?', [id]) as any[];
+        const result = await query('SELECT id, nombre, puntos, descripcion FROM niveles WHERE id = $1', [id]) as any[];
         
         if (result.length === 0) {
           throw new UserInputError('Nivel no encontrado');
@@ -64,7 +64,7 @@ export const nivelResolvers = {
     nivelesPorNombre: async (_: any, { nombre }: { nombre: string }) => {
       try {
         const result = await query(
-          'SELECT id, nombre, puntos, descripcion FROM niveles WHERE nombre LIKE ? ORDER BY puntos ASC',
+          'SELECT id, nombre, puntos, descripcion FROM niveles WHERE nombre ILIKE $1 ORDER BY puntos ASC',
           [`%${nombre}%`]
         ) as any[];
         return result;
@@ -100,7 +100,7 @@ export const nivelResolvers = {
       try {
         // Verificar que no exista un nivel con el mismo nombre
         const existingLevel = await query(
-          'SELECT id FROM niveles WHERE nombre = ?',
+          'SELECT id FROM niveles WHERE lower(nombre) = lower($1)',
           [nombre.trim()]
         ) as any[];
 
@@ -110,7 +110,7 @@ export const nivelResolvers = {
 
         // Verificar que no exista un nivel con los mismos puntos
         const existingPoints = await query(
-          'SELECT id FROM niveles WHERE puntos = ?',
+          'SELECT id FROM niveles WHERE puntos = $1',
           [puntos]
         ) as any[];
 
@@ -118,16 +118,10 @@ export const nivelResolvers = {
           throw new UserInputError('Ya existe un nivel con esa cantidad de puntos');
         }
 
-        // Crear el nuevo nivel
-        const result = await query(
-          'INSERT INTO niveles (nombre, puntos, descripcion) VALUES (?, ?, ?)',
-          [nombre.trim(), puntos, descripcion || null]
-        ) as any;
-
-        // Obtener el nivel creado
+        // Crear el nuevo nivel y devolverlo
         const newLevel = await query(
-          'SELECT id, nombre, puntos, descripcion FROM niveles WHERE id = ?',
-          [result.insertId]
+          'INSERT INTO niveles (nombre, puntos, descripcion) VALUES ($1, $2, $3) RETURNING id, nombre, puntos, descripcion',
+          [nombre.trim(), puntos, descripcion || null]
         ) as any[];
 
         return newLevel[0];
@@ -169,7 +163,7 @@ export const nivelResolvers = {
       try {
         // Verificar que el nivel existe
         const levelExists = await query(
-          'SELECT id FROM niveles WHERE id = ?',
+          'SELECT id FROM niveles WHERE id = $1',
           [id]
         ) as any[];
 
@@ -180,7 +174,7 @@ export const nivelResolvers = {
         // Verificar que no exista otro nivel con el mismo nombre (si se está actualizando el nombre)
         if (nombre) {
           const existingLevel = await query(
-            'SELECT id FROM niveles WHERE nombre = ? AND id != ?',
+            'SELECT id FROM niveles WHERE lower(nombre) = lower($1) AND id != $2',
             [nombre.trim(), id]
           ) as any[];
 
@@ -192,7 +186,7 @@ export const nivelResolvers = {
         // Verificar que no exista otro nivel con los mismos puntos (si se están actualizando los puntos)
         if (puntos !== undefined) {
           const existingPoints = await query(
-            'SELECT id FROM niveles WHERE puntos = ? AND id != ?',
+            'SELECT id FROM niveles WHERE puntos = $1 AND id != $2',
             [puntos, id]
           ) as any[];
 
@@ -206,28 +200,28 @@ export const nivelResolvers = {
         const valores: any[] = [];
 
         if (nombre) {
-          campos.push('nombre = ?');
           valores.push(nombre.trim());
+          campos.push(`nombre = $${valores.length}`);
         }
 
         if (puntos !== undefined) {
-          campos.push('puntos = ?');
           valores.push(puntos);
+          campos.push(`puntos = $${valores.length}`);
         }
 
         if (descripcion !== undefined) {
-          campos.push('descripcion = ?');
           valores.push(descripcion);
+          campos.push(`descripcion = $${valores.length}`);
         }
 
         valores.push(id);
-        const updateQuery = `UPDATE niveles SET ${campos.join(', ')} WHERE id = ?`;
+        const updateQuery = `UPDATE niveles SET ${campos.join(', ')} WHERE id = $${valores.length}`;
 
         await query(updateQuery, valores);
 
         // Obtener el nivel actualizado
         const updatedLevel = await query(
-          'SELECT id, nombre, puntos, descripcion FROM niveles WHERE id = ?',
+          'SELECT id, nombre, puntos, descripcion FROM niveles WHERE id = $1',
           [id]
         ) as any[];
 
@@ -253,7 +247,7 @@ export const nivelResolvers = {
       try {
         // Verificar que el nivel existe
         const levelExists = await query(
-          'SELECT id FROM niveles WHERE id = ?',
+          'SELECT id FROM niveles WHERE id = $1',
           [id]
         ) as any[];
 
@@ -263,7 +257,7 @@ export const nivelResolvers = {
 
         // Verificar si hay tareas asociadas a este nivel
         const associatedTasks = await query(
-          'SELECT id FROM tareas WHERE nivel_id = ? LIMIT 1',
+          'SELECT id FROM tareas WHERE nivel_id = $1 LIMIT 1',
           [id]
         ) as any[];
 
@@ -271,23 +265,8 @@ export const nivelResolvers = {
           throw new UserInputError('No se puede eliminar el nivel porque tiene tareas asociadas');
         }
 
-        // Verificar si hay usuarios asociados a este nivel
-        const associatedUsers = await query(
-          'SELECT id FROM usuarios WHERE nivel_id = ? LIMIT 1',
-          [id]
-        ) as any[];
-
-        if (associatedUsers.length > 0) {
-          throw new UserInputError('No se puede eliminar el nivel porque tiene usuarios asociados');
-        }
-
         // Eliminar el nivel
-        const result = await query(
-          'DELETE FROM niveles WHERE id = ?',
-          [id]
-        ) as any;
-
-        return result.affectedRows > 0;
+        return (await ejecutar('DELETE FROM niveles WHERE id = $1', [id])) > 0;
       } catch (error) {
         if (error instanceof GraphQLError) {
           throw error;

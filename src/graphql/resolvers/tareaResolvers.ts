@@ -1,4 +1,4 @@
-import { query, transaction } from '../../config/db';
+import { query, ejecutar, transaction, esDuplicado, HOY_UTC } from '../../config/db';
 import { corregirTarea } from '../../services/correccion';
 import { clasificarError } from '../../services/errores';
 import { corregirMision, comoEjecucion, tipoErrorMision, misionParaGraphQL, infoMision, probarEscenario, esSimulacion, materialMision } from '../../services/misiones';
@@ -29,7 +29,7 @@ interface TestTareaInput {
   oculto?: boolean;
 }
 
-// Convierte una fila de MySQL (snake_case) al tipo Tarea de GraphQL (camelCase)
+// Convierte una fila de la BD (snake_case) al tipo Tarea de GraphQL (camelCase)
 const mapTarea = (tarea: any) => ({
   ...tarea,
   puntosBase: tarea.puntos_base,
@@ -88,7 +88,7 @@ export const tareaResolvers = {
     categoria: async (parent: any) => {
       try {
         const result = await query(
-          'SELECT id, nombre FROM categorias WHERE id = ?',
+          'SELECT id, nombre FROM categorias WHERE id = $1',
           [parent.categoria_id]
         ) as any[];
         return result[0];
@@ -102,7 +102,7 @@ export const tareaResolvers = {
     nivel: async (parent: any) => {
       try {
         const result = await query(
-          'SELECT id, nombre, puntos FROM niveles WHERE id = ?',
+          'SELECT id, nombre, puntos FROM niveles WHERE id = $1',
           [parent.nivel_id]
         ) as any[];
         return result[0];
@@ -135,23 +135,23 @@ export const tareaResolvers = {
 
         if (filtro) {
           if (filtro.categoriaId) {
-            condiciones.push('t.categoria_id = ?');
             parametros.push(filtro.categoriaId);
+            condiciones.push(`t.categoria_id = $${parametros.length}`);
           }
 
           if (filtro.nivelId) {
-            condiciones.push('t.nivel_id = ?');
             parametros.push(filtro.nivelId);
+            condiciones.push(`t.nivel_id = $${parametros.length}`);
           }
 
           if (filtro.completado !== undefined) {
-            condiciones.push('t.completado = ?');
             parametros.push(filtro.completado);
+            condiciones.push(`t.completado = $${parametros.length}`);
           }
 
           if (filtro.prioridad) {
-            condiciones.push('t.prioridad = ?');
             parametros.push(filtro.prioridad);
+            condiciones.push(`t.prioridad = $${parametros.length}`);
           }
         }
 
@@ -182,7 +182,7 @@ export const tareaResolvers = {
           `SELECT id, categoria_id, nivel_id, titulo, descripcion, fecha_vencimiento, 
                   prioridad, completado, tiempo_finalizacion_id, puntos_base, puntos_bonus,
                   codigo_base, resultado_esperado, tipo, config
-           FROM tareas WHERE id = ?`,
+           FROM tareas WHERE id = $1`,
           [id]
         ) as any[];
         
@@ -217,7 +217,7 @@ export const tareaResolvers = {
           `SELECT id, categoria_id, nivel_id, titulo, descripcion, fecha_vencimiento, 
                   prioridad, completado, tiempo_finalizacion_id, puntos_base, puntos_bonus,
                   codigo_base, resultado_esperado, tipo, config
-           FROM tareas WHERE categoria_id = ? AND tipo <> 'sabotaje' 
+           FROM tareas WHERE categoria_id = $1 AND tipo <> 'sabotaje' 
            ORDER BY prioridad DESC, fecha_vencimiento ASC`,
           [categoriaId]
         ) as any[];
@@ -244,7 +244,7 @@ export const tareaResolvers = {
           `SELECT id, categoria_id, nivel_id, titulo, descripcion, fecha_vencimiento, 
                   prioridad, completado, tiempo_finalizacion_id, puntos_base, puntos_bonus,
                   codigo_base, resultado_esperado, tipo, config
-           FROM tareas WHERE nivel_id = ? AND tipo <> 'sabotaje' 
+           FROM tareas WHERE nivel_id = $1 AND tipo <> 'sabotaje' 
            ORDER BY prioridad DESC, fecha_vencimiento ASC`,
           [nivelId]
         ) as any[];
@@ -297,7 +297,7 @@ export const tareaResolvers = {
           `SELECT id, categoria_id, nivel_id, titulo, descripcion, fecha_vencimiento, 
                   prioridad, completado, tiempo_finalizacion_id, puntos_base, puntos_bonus,
                   codigo_base, resultado_esperado, tipo, config
-           FROM tareas WHERE prioridad = ? AND tipo <> 'sabotaje' 
+           FROM tareas WHERE prioridad = $1 AND tipo <> 'sabotaje' 
            ORDER BY fecha_vencimiento ASC`,
           [prioridad]
         ) as any[];
@@ -327,7 +327,7 @@ export const tareaResolvers = {
            FROM tareas t 
            JOIN tareas_usuarios tu ON t.id = tu.tarea_id
            JOIN niveles n ON t.nivel_id = n.id
-           WHERE tu.usuario_id = ?
+           WHERE tu.usuario_id = $1
            ORDER BY tu.completado_el DESC`
         , [usuarioId]) as any[];
         
@@ -375,7 +375,7 @@ export const tareaResolvers = {
       const limiteSeguro = Math.min(Math.max(Math.floor(limite), 1), 100);
       const filas = await query(
         `SELECT id, codigo, correcto, tests_superados, tests_totales, tipo_error, segundos_en_tarea, creado_el
-         FROM intentos WHERE usuario_id = ? AND tarea_id = ?
+         FROM intentos WHERE usuario_id = $1 AND tarea_id = $2
          ORDER BY creado_el DESC, id DESC LIMIT ${limiteSeguro}`,
         [usuario.id, tareaId]
       ) as any[];
@@ -402,7 +402,7 @@ export const tareaResolvers = {
         // 1º: un reto programado para hoy
         let result = await query(
           `SELECT ${campos} FROM tareas t JOIN categorias c ON t.categoria_id = c.id
-           WHERE c.nombre = 'Reto Diario' AND t.tipo <> 'sabotaje' AND t.fecha_vencimiento = UTC_DATE()
+           WHERE c.nombre = 'Reto Diario' AND t.tipo <> 'sabotaje' AND t.fecha_vencimiento = ${HOY_UTC}
            ORDER BY t.id LIMIT 1`
         ) as any[];
 
@@ -413,7 +413,7 @@ export const tareaResolvers = {
             `SELECT ${campos} FROM tareas t JOIN categorias c ON t.categoria_id = c.id
              WHERE c.nombre = 'Reto Diario' AND t.tipo <> 'sabotaje'
              ORDER BY t.id
-             LIMIT 1 OFFSET ?`,
+             LIMIT 1 OFFSET $1`,
             [String(await indiceRetoDelDia())]
           ) as any[];
         }
@@ -445,7 +445,7 @@ export const tareaResolvers = {
       try {
         const usuarioId = context.user.id;
         const result = await query(
-          'SELECT COUNT(*) as count FROM tareas_usuarios WHERE usuario_id = ? AND tarea_id = ?',
+          'SELECT COUNT(*) as count FROM tareas_usuarios WHERE usuario_id = $1 AND tarea_id = $2',
           [usuarioId, tareaId]
         ) as any[];
 
@@ -490,7 +490,7 @@ export const tareaResolvers = {
       try {
         // Verificar que la categoría existe
         const categoriaExists = await query(
-          'SELECT id FROM categorias WHERE id = ?',
+          'SELECT id FROM categorias WHERE id = $1',
           [categoriaId]
         ) as any[];
 
@@ -500,7 +500,7 @@ export const tareaResolvers = {
 
         // Verificar que el nivel existe
         const nivelExists = await query(
-          'SELECT id FROM niveles WHERE id = ?',
+          'SELECT id FROM niveles WHERE id = $1',
           [nivelId]
         ) as any[];
 
@@ -511,7 +511,7 @@ export const tareaResolvers = {
         // Verificar tiempo de finalización si se proporciona
         if (tiempoFinalizacionId) {
           const tiempoExists = await query(
-            'SELECT id FROM tiempos_finalizacion WHERE id = ?',
+            'SELECT id FROM tiempos_finalizacion WHERE id = $1',
             [tiempoFinalizacionId]
           ) as any[];
 
@@ -521,26 +521,26 @@ export const tareaResolvers = {
         }
 
         // Crear la nueva tarea y sus tests en una transacción
-        // (mysql2 no acepta undefined como parámetro: los campos opcionales van a null)
         const insertId = await transaction(async (conn) => {
-          const [result] = await conn.execute(
+          const [nueva] = await conn.query(
             `INSERT INTO tareas (categoria_id, nivel_id, titulo, descripcion, fecha_vencimiento,
                                 prioridad, puntos_base, tiempo_finalizacion_id, codigo_base, resultado_esperado, solucion)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+             RETURNING id`,
             [categoriaId, nivelId, input.titulo || '', descripcion, fechaVencimiento ?? null, prioridad ?? null,
              puntosBase ?? null, tiempoFinalizacionId ?? null, input.codigoBase || '', input.resultadoEsperado || '',
              input.solucion ?? null]
-          ) as any;
+          );
 
           for (const [orden, test] of (input.tests || []).entries()) {
-            await conn.execute(
+            await conn.query(
               `INSERT INTO tests_tarea (tarea_id, descripcion, codigo_test, entrada, salida_esperada, oculto, orden)
-               VALUES (?, ?, ?, ?, ?, ?, ?)`,
-              [result.insertId, test.descripcion || '', test.codigoTest ?? null, test.entrada ?? null,
-               test.salidaEsperada, test.oculto ? 1 : 0, orden]
+               VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+              [nueva.id, test.descripcion || '', test.codigoTest ?? null, test.entrada ?? null,
+               test.salidaEsperada, !!test.oculto, orden]
             );
           }
-          return result.insertId;
+          return nueva.id;
         });
 
         // Obtener la tarea creada
@@ -548,7 +548,7 @@ export const tareaResolvers = {
           `SELECT id, categoria_id, nivel_id, titulo, descripcion, fecha_vencimiento, 
                   prioridad, completado, tiempo_finalizacion_id, puntos_base, puntos_bonus,
                   codigo_base, resultado_esperado, tipo, config
-           FROM tareas WHERE id = ?`,
+           FROM tareas WHERE id = $1`,
           [insertId]
         ) as any[];
 
@@ -595,7 +595,7 @@ export const tareaResolvers = {
       try {
         // Verificar que la tarea existe
         const tareaExists = await query(
-          'SELECT id FROM tareas WHERE id = ?',
+          'SELECT id FROM tareas WHERE id = $1',
           [id]
         ) as any[];
 
@@ -606,7 +606,7 @@ export const tareaResolvers = {
         // Verificar referencias si se proporcionan
         if (categoriaId) {
           const categoriaExists = await query(
-            'SELECT id FROM categorias WHERE id = ?',
+            'SELECT id FROM categorias WHERE id = $1',
             [categoriaId]
           ) as any[];
 
@@ -617,7 +617,7 @@ export const tareaResolvers = {
 
         if (nivelId) {
           const nivelExists = await query(
-            'SELECT id FROM niveles WHERE id = ?',
+            'SELECT id FROM niveles WHERE id = $1',
             [nivelId]
           ) as any[];
 
@@ -628,7 +628,7 @@ export const tareaResolvers = {
 
         if (tiempoFinalizacionId) {
           const tiempoExists = await query(
-            'SELECT id FROM tiempos_finalizacion WHERE id = ?',
+            'SELECT id FROM tiempos_finalizacion WHERE id = $1',
             [tiempoFinalizacionId]
           ) as any[];
 
@@ -642,58 +642,58 @@ export const tareaResolvers = {
         const valores: any[] = [];
 
         if (categoriaId) {
-          campos.push('categoria_id = ?');
           valores.push(categoriaId);
+          campos.push(`categoria_id = $${valores.length}`);
         }
 
         if (nivelId) {
-          campos.push('nivel_id = ?');
           valores.push(nivelId);
+          campos.push(`nivel_id = $${valores.length}`);
         }
 
         if (descripcion) {
-          campos.push('descripcion = ?');
           valores.push(descripcion);
+          campos.push(`descripcion = $${valores.length}`);
         }
 
         if (fechaVencimiento !== undefined) {
-          campos.push('fecha_vencimiento = ?');
           valores.push(fechaVencimiento);
+          campos.push(`fecha_vencimiento = $${valores.length}`);
         }
 
         if (prioridad) {
-          campos.push('prioridad = ?');
           valores.push(prioridad);
+          campos.push(`prioridad = $${valores.length}`);
         }
 
         if (completado !== undefined) {
-          campos.push('completado = ?');
           valores.push(completado);
+          campos.push(`completado = $${valores.length}`);
         }
 
         if (puntosBase !== undefined) {
-          campos.push('puntos_base = ?');
           valores.push(puntosBase);
+          campos.push(`puntos_base = $${valores.length}`);
         }
 
         if (tiempoFinalizacionId !== undefined) {
-          campos.push('tiempo_finalizacion_id = ?');
           valores.push(tiempoFinalizacionId);
+          campos.push(`tiempo_finalizacion_id = $${valores.length}`);
         }
 
         if (input.titulo !== undefined) {
-          campos.push('titulo = ?');
           valores.push(input.titulo);
+          campos.push(`titulo = $${valores.length}`);
         }
 
         if (input.codigoBase !== undefined) {
-          campos.push('codigo_base = ?');
           valores.push(input.codigoBase);
+          campos.push(`codigo_base = $${valores.length}`);
         }
 
         if (input.resultadoEsperado !== undefined) {
-          campos.push('resultado_esperado = ?');
           valores.push(input.resultadoEsperado);
+          campos.push(`resultado_esperado = $${valores.length}`);
         }
 
         if (campos.length === 0) {
@@ -701,7 +701,7 @@ export const tareaResolvers = {
         }
 
         valores.push(id);
-        const updateQuery = `UPDATE tareas SET ${campos.join(', ')} WHERE id = ?`;
+        const updateQuery = `UPDATE tareas SET ${campos.join(', ')} WHERE id = $${valores.length}`;
 
         await query(updateQuery, valores);
 
@@ -710,7 +710,7 @@ export const tareaResolvers = {
           `SELECT id, categoria_id, nivel_id, titulo, descripcion, fecha_vencimiento, 
                   prioridad, completado, tiempo_finalizacion_id, puntos_base, puntos_bonus,
                   codigo_base, resultado_esperado, tipo, config
-           FROM tareas WHERE id = ?`,
+           FROM tareas WHERE id = $1`,
           [id]
         ) as any[];
 
@@ -737,7 +737,7 @@ export const tareaResolvers = {
       try {
         // Verificar que la tarea existe
         const tareaExists = await query(
-          'SELECT id FROM tareas WHERE id = ?',
+          'SELECT id FROM tareas WHERE id = $1',
           [id]
         ) as any[];
 
@@ -747,7 +747,7 @@ export const tareaResolvers = {
 
         // Verificar si hay registros en tareas_usuarios
         const associatedUserTasks = await query(
-          'SELECT usuario_id FROM tareas_usuarios WHERE tarea_id = ? LIMIT 1',
+          'SELECT usuario_id FROM tareas_usuarios WHERE tarea_id = $1 LIMIT 1',
           [id]
         ) as any[];
 
@@ -756,12 +756,7 @@ export const tareaResolvers = {
         }
 
         // Eliminar la tarea
-        const result = await query(
-          'DELETE FROM tareas WHERE id = ?',
-          [id]
-        ) as any;
-
-        return result.affectedRows > 0;
+        return (await ejecutar('DELETE FROM tareas WHERE id = $1', [id])) > 0;
       } catch (error) {
         if (error instanceof GraphQLError) {
           throw error;
@@ -779,7 +774,7 @@ export const tareaResolvers = {
       context: Context
     ) => {
       const usuario = requireAuth(context, 'Debes estar autenticado para lanzar una misión');
-      const filas = await query('SELECT id, tipo, config FROM tareas WHERE id = ?', [tareaId]) as any[];
+      const filas = await query('SELECT id, tipo, config FROM tareas WHERE id = $1', [tareaId]) as any[];
       const tarea = filas[0];
       if (!tarea) throw new UserInputError('Tarea no encontrada');
       if (!esSimulacion(tarea)) throw new UserInputError('Esta tarea no es una misión ni un reto');
@@ -795,7 +790,7 @@ export const tareaResolvers = {
       const usuario = requireAuth(context, 'Debes estar autenticado para enviar una solución');
 
       const tareaInfo = await query(
-        'SELECT t.*, n.puntos as puntos_nivel FROM tareas t JOIN niveles n ON t.nivel_id = n.id WHERE t.id = ?',
+        'SELECT t.*, n.puntos as puntos_nivel FROM tareas t JOIN niveles n ON t.nivel_id = n.id WHERE t.id = $1',
         [tareaId]
       ) as any[];
 
@@ -817,8 +812,8 @@ export const tareaResolvers = {
       try {
         await query(
           `INSERT INTO intentos (usuario_id, tarea_id, codigo, correcto, tests_superados, tests_totales, tipo_error, segundos_en_tarea)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-          [usuario.id, tarea.id, codigo, correcto ? 1 : 0, mision?.superados ?? tests?.superados ?? null,
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [usuario.id, tarea.id, codigo, correcto, mision?.superados ?? tests?.superados ?? null,
            mision?.total ?? tests?.total ?? null,
            mision ? tipoErrorMision(mision) : clasificarError(ejecucion, correcto, !!tests),
            Math.max(0, Math.floor(tiempoCompletado || 0))]
@@ -880,15 +875,15 @@ export const tareaResolvers = {
       // La clave primaria (usuario_id, tarea_id) impide sumar dos veces la misma tarea.
       try {
         await transaction(async (conn) => {
-          await conn.execute(
+          await conn.query(
             `INSERT INTO tareas_usuarios (usuario_id, tarea_id, tiempo_completado, puntos_base, puntos_bonus, puntos_totales)
-             VALUES (?, ?, ?, ?, ?, ?)`,
+             VALUES ($1, $2, $3, $4, $5, $6)`,
             [usuario.id, tareaId, tiempoFormateado, puntosBase, puntosBonus, puntosTotales]
           );
-          await conn.execute('UPDATE usuarios SET puntos = puntos + ? WHERE id = ?', [puntosTotales, usuario.id]);
+          await conn.query('UPDATE usuarios SET puntos = puntos + $1 WHERE id = $2', [puntosTotales, usuario.id]);
         });
       } catch (error: any) {
-        if (error.code === 'ER_DUP_ENTRY') {
+        if (esDuplicado(error)) {
           return {
             ...respuesta,
             yaCompletada: true,
@@ -902,12 +897,13 @@ export const tareaResolvers = {
       // Insignia «Cirujano»: arreglar el sabotaje cambiando como mucho las líneas que cambió el saboteador
       if (sabotaje && esArregloQuirurgico(tarea.codigo_base, codigo, sabotaje.lineas_cambiadas)) {
         try {
-          const r = await query(
-            `INSERT IGNORE INTO insignias_usuarios (usuario_id, insignia_id)
-             SELECT ?, id FROM insignias WHERE nombre = 'Cirujano'`,
+          const nuevas = await ejecutar(
+            `INSERT INTO insignias_usuarios (usuario_id, insignia_id)
+             SELECT $1, id FROM insignias WHERE nombre = 'Cirujano'
+             ON CONFLICT DO NOTHING`,
             [usuario.id]
-          ) as any;
-          if (r.affectedRows > 0) respuesta.insigniasNuevas.push('Cirujano');
+          );
+          if (nuevas > 0) respuesta.insigniasNuevas.push('Cirujano');
         } catch (error) {
           console.error('No se pudo dar la insignia Cirujano:', error);
         }

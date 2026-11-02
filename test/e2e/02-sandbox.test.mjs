@@ -16,7 +16,7 @@ test('ejecuta código normal', async () => {
 });
 
 test('el runner no llega a MySQL', async () => {
-  const x = await ejecutar(T, 'import socket\ntry:\n  socket.create_connection(("mysql-db",3306),timeout=2); print("CONECTA")\nexcept Exception as e: print("BLOQUEADO")');
+  const x = await ejecutar(T, 'import socket\ntry:\n  socket.create_connection(("postgres-db",5432),timeout=2); print("CONECTA")\nexcept Exception as e: print("BLOQUEADO")');
   assert.match(x.stdout, /BLOQUEADO/);
 });
 

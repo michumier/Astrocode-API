@@ -1,5 +1,6 @@
-import { PoolConnection } from 'mysql2/promise';
-import { pool } from '../config/db';
+import { readFileSync } from 'fs';
+import path from 'path';
+import { query, transaction, Conexion } from '../config/db';
 import { testsRetosDiarios } from './seeds/retosDiarios';
 import { misionesIniciales } from './seeds/misiones';
 import { retosBomba, retosLengua, retosCamara, retosImpostor, retosNebulosa, retosRadio, retosColonia, RetoSemilla } from './seeds/retos';
@@ -7,49 +8,39 @@ import { ejerciciosRevisados, solucionArbolBinario } from './seeds/ejercicios';
 import { retosDiariosNuevos } from './seeds/retosDiariosNuevos';
 
 /*
- * Migraciones de la base de datos.
+ * Migraciones de la base de datos (Postgres desde la fase 8).
  *
- * `BD Astrocode.sql` solo se ejecuta cuando el volumen de MySQL está vacío
- * (docker-entrypoint-initdb.d). Para cambiar el esquema de una BD que ya existe
- * se añade aquí una migración nueva AL FINAL de la lista (nunca editar una ya aplicada).
- * Al arrancar, la API aplica las que falten y las apunta en `schema_migrations`.
+ * La 001 crea el esquema completo (`esquema.sql`) y carga el catálogo original (`datos-base.sql`).
+ * Las siguientes son las semillas que se fueron añadiendo con MySQL; conservan su número para
+ * poder seguirles la pista en el historial. Para cambiar algo se añade una migración nueva AL FINAL
+ * (nunca editar una ya aplicada). Se apuntan en `schema_migrations`.
+ *
+ * Cada migración va en su propia transacción: si falla, no deja nada a medias (en Postgres
+ * también se deshacen los CREATE y ALTER). Se aplican al arrancar la API en local y con
+ * `npm run migrar` en el despliegue.
  */
 interface Migracion {
   id: string;
   sql?: string;
-  run?: (conn: PoolConnection) => Promise<void>;
+  run?: (conn: Conexion) => Promise<void>;
 }
+
+// Los .sql están junto a este archivo (en dist los copia `npm run build`)
+const leerSql = (archivo: string) => readFileSync(path.join(__dirname, archivo), 'utf8');
+
+// Tablas cuyos ids vienen fijados en los datos base: su contador sigue a partir del mayor
+const TABLAS_CON_DATOS = ['categorias', 'niveles', 'tiempos_finalizacion', 'insignias', 'tareas'];
 
 const migraciones: Migracion[] = [
   {
-    id: '001_rol_usuarios',
-    sql: "ALTER TABLE usuarios ADD COLUMN rol VARCHAR(20) NOT NULL DEFAULT 'alumno'",
-  },
-  {
-    // Los resolvers de categorías ya usaban esta columna, pero no existía en la BD
-    id: '002_descripcion_categorias',
-    sql: 'ALTER TABLE categorias ADD COLUMN descripcion TEXT NULL',
-  },
-  {
-    // Tests que se ejecutan contra el código del alumno. Los ocultos no se le enseñan.
-    id: '003_tests_tarea',
-    sql: `CREATE TABLE tests_tarea (
-      id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-      tarea_id BIGINT NOT NULL,
-      descripcion VARCHAR(255) NOT NULL DEFAULT '',
-      codigo_test TEXT NULL COMMENT 'Código que se añade tras el del alumno (llamadas + print)',
-      entrada TEXT NULL COMMENT 'stdin para el programa',
-      salida_esperada TEXT NOT NULL,
-      oculto TINYINT(1) NOT NULL DEFAULT 0,
-      orden INT NOT NULL DEFAULT 0,
-      KEY tarea_id (tarea_id),
-      CONSTRAINT tests_tarea_ibfk_1 FOREIGN KEY (tarea_id) REFERENCES tareas (id) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`,
-  },
-  {
-    // Solución de referencia: solo la ve el servidor (y la IA para dar pistas), nunca el alumno
-    id: '004_solucion_tareas',
-    sql: 'ALTER TABLE tareas ADD COLUMN solucion TEXT NULL',
+    id: '001_esquema',
+    run: async (conn) => {
+      await conn.query(leerSql('esquema.sql'));
+      await conn.query(leerSql('datos-base.sql'));
+      for (const tabla of TABLAS_CON_DATOS) {
+        await conn.query(`SELECT setval(pg_get_serial_sequence('${tabla}', 'id'), (SELECT max(id) FROM ${tabla}))`);
+      }
+    },
   },
   {
     // En los retos diarios, "resultado_esperado" contenía la SOLUCIÓN (se le mostraba al alumno
@@ -58,17 +49,17 @@ const migraciones: Migracion[] = [
     id: '005_tests_retos_diarios',
     run: async (conn) => {
       for (const reto of testsRetosDiarios) {
-        const [tareas] = await conn.query('SELECT id FROM tareas WHERE titulo = ?', [reto.titulo]) as any[];
-        for (const { id } of tareas as any[]) {
+        const tareas = await conn.query('SELECT id FROM tareas WHERE titulo = $1 ORDER BY id', [reto.titulo]);
+        for (const { id } of tareas) {
           await conn.query(
-            'UPDATE tareas SET solucion = resultado_esperado, resultado_esperado = ? WHERE id = ?',
+            'UPDATE tareas SET solucion = resultado_esperado, resultado_esperado = $1 WHERE id = $2',
             [reto.ejemplo, id]
           );
           for (const [orden, test] of reto.tests.entries()) {
             await conn.query(
               `INSERT INTO tests_tarea (tarea_id, descripcion, codigo_test, salida_esperada, oculto, orden)
-               VALUES (?, ?, ?, ?, ?, ?)`,
-              [id, test.descripcion, test.codigo, test.salida, test.oculto ? 1 : 0, orden]
+               VALUES ($1, $2, $3, $4, $5, $6)`,
+              [id, test.descripcion, test.codigo, test.salida, !!test.oculto, orden]
             );
           }
         }
@@ -76,95 +67,28 @@ const migraciones: Migracion[] = [
     },
   },
   {
-    // Registro de pistas pedidas a la IA (para limitar cuántas pide cada alumno)
-    id: '006_pistas_ia',
-    sql: `CREATE TABLE pistas_ia (
-      id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-      usuario_id BIGINT NOT NULL,
-      tarea_id BIGINT NOT NULL,
-      creado_el TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
-      KEY usuario_fecha (usuario_id, creado_el),
-      CONSTRAINT pistas_ia_ibfk_1 FOREIGN KEY (usuario_id) REFERENCES usuarios (id) ON DELETE CASCADE,
-      CONSTRAINT pistas_ia_ibfk_2 FOREIGN KEY (tarea_id) REFERENCES tareas (id) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`,
-  },
-  {
-    // Igual que en categorías: los resolvers de niveles pedían esta columna y la query fallaba siempre
-    id: '007_descripcion_niveles',
-    sql: 'ALTER TABLE niveles ADD COLUMN descripcion TEXT NULL',
-  },
-  {
-    // Cada envío de solución (para el puente de mando y la repetición de intentos)
-    id: '008_intentos',
-    sql: `CREATE TABLE intentos (
-      id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-      usuario_id BIGINT NOT NULL,
-      tarea_id BIGINT NOT NULL,
-      codigo MEDIUMTEXT NOT NULL,
-      correcto TINYINT(1) NOT NULL,
-      tests_superados INT NULL,
-      tests_totales INT NULL,
-      tipo_error VARCHAR(50) NULL,
-      segundos_en_tarea INT NULL,
-      creado_el TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
-      KEY tarea_fecha (tarea_id, creado_el),
-      KEY usuario_fecha (usuario_id, creado_el),
-      CONSTRAINT intentos_ibfk_1 FOREIGN KEY (usuario_id) REFERENCES usuarios (id) ON DELETE CASCADE,
-      CONSTRAINT intentos_ibfk_2 FOREIGN KEY (tarea_id) REFERENCES tareas (id) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`,
-  },
-  {
-    // Tipos de tarea: 'codigo' (las de siempre), 'sabotaje' y 'pilotaje' (fases 1 y 2)
-    id: '009_tipo_config_tareas',
-    sql: "ALTER TABLE tareas ADD COLUMN tipo VARCHAR(20) NOT NULL DEFAULT 'codigo', ADD COLUMN config JSON NULL",
-  },
-  {
-    // Fase 1: sabotajes generados (y verificados) a partir de la solución de una tarea
-    id: '010_sabotajes',
-    sql: `CREATE TABLE sabotajes (
-      id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-      tarea_original_id BIGINT NOT NULL,
-      tarea_id BIGINT NULL COMMENT 'Tarea tipo sabotaje creada al publicarlo',
-      codigo MEDIUMTEXT NOT NULL,
-      hash CHAR(64) NOT NULL,
-      operador VARCHAR(30) NOT NULL,
-      descripcion VARCHAR(255) NOT NULL,
-      linea INT NULL,
-      lineas_cambiadas INT NOT NULL,
-      diff TEXT NOT NULL,
-      contexto TEXT NULL,
-      dificultad VARCHAR(10) NOT NULL,
-      tests_fallidos INT NOT NULL,
-      tests_totales INT NOT NULL,
-      origen VARCHAR(10) NOT NULL DEFAULT 'ast',
-      creado_el TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE KEY original_hash (tarea_original_id, hash),
-      CONSTRAINT sabotajes_ibfk_1 FOREIGN KEY (tarea_original_id) REFERENCES tareas (id) ON DELETE CASCADE,
-      CONSTRAINT sabotajes_ibfk_2 FOREIGN KEY (tarea_id) REFERENCES tareas (id) ON DELETE SET NULL
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci`,
-  },
-  {
     id: '011_insignia_cirujano',
-    sql: `INSERT IGNORE INTO insignias (nombre, descripcion, url_imagen)
-          VALUES ('Cirujano', 'Arregló un sabotaje cambiando el mínimo de líneas posible.', 'https://img.icons8.com/color/96/scalpel.png')`,
+    sql: `INSERT INTO insignias (nombre, descripcion, url_imagen)
+          VALUES ('Cirujano', 'Arregló un sabotaje cambiando el mínimo de líneas posible.', 'https://img.icons8.com/color/96/scalpel.png')
+          ON CONFLICT (nombre) DO NOTHING`,
   },
   {
     // Fase 2: las tres misiones de pilotaje iniciales
     id: '012_misiones_pilotaje',
     run: async (conn) => {
       for (const m of misionesIniciales) {
-        const [existe] = await conn.query("SELECT id FROM tareas WHERE titulo = ? AND tipo = 'pilotaje'", [m.titulo]) as any[];
-        if ((existe as any[]).length) continue;
-        const [cat] = await conn.query('SELECT id FROM categorias WHERE nombre = ?', [m.categoria]) as any[];
-        const [niv] = await conn.query('SELECT id FROM niveles WHERE nombre = ?', [m.nivel]) as any[];
-        if (!(cat as any[]).length || !(niv as any[]).length) {
+        const existe = await conn.query("SELECT id FROM tareas WHERE titulo = $1 AND tipo = 'pilotaje'", [m.titulo]);
+        if (existe.length) continue;
+        const cat = await conn.query('SELECT id FROM categorias WHERE nombre = $1', [m.categoria]);
+        const niv = await conn.query('SELECT id FROM niveles WHERE nombre = $1', [m.nivel]);
+        if (!cat.length || !niv.length) {
           console.warn(`Misión «${m.titulo}» omitida: no existe la categoría o el nivel`);
           continue;
         }
         await conn.query(
           `INSERT INTO tareas (categoria_id, nivel_id, titulo, descripcion, codigo_base, resultado_esperado, solucion, puntos_base, tipo, config)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pilotaje', ?)`,
-          [(cat as any[])[0].id, (niv as any[])[0].id, m.titulo, m.descripcion, m.codigoBase, m.resultadoEsperado,
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pilotaje', $9)`,
+          [cat[0].id, niv[0].id, m.titulo, m.descripcion, m.codigoBase, m.resultadoEsperado,
            m.solucion, m.puntos, JSON.stringify(m.config)]
         );
       }
@@ -224,43 +148,52 @@ const migraciones: Migracion[] = [
 
 // Antes de borrar una copia, su progreso pasa a la que se queda: completadas (si el alumno tenía las dos,
 // cuenta una), intentos, pistas y sabotajes. Los puntos ya ganados no se tocan.
-async function quitarRetosDiariosRepetidos(conn: any) {
-  const [filas] = await conn.query(
+async function quitarRetosDiariosRepetidos(conn: Conexion) {
+  const filas = await conn.query(
     `SELECT t.id, TRIM(t.titulo) AS titulo FROM tareas t JOIN categorias c ON t.categoria_id = c.id
      WHERE c.nombre = 'Reto Diario' AND t.tipo = 'codigo' ORDER BY t.id`
-  ) as any[];
+  );
   const primera = new Map<string, number>();
-  for (const { id, titulo } of filas as any[]) {
+  for (const { id, titulo } of filas) {
     const queda = primera.get(titulo);
     if (queda === undefined) { primera.set(titulo, id); continue; }
-    await conn.query('UPDATE IGNORE tareas_usuarios SET tarea_id = ? WHERE tarea_id = ?', [queda, id]);
-    await conn.query('DELETE FROM tareas_usuarios WHERE tarea_id = ?', [id]);
-    await conn.query('UPDATE intentos SET tarea_id = ? WHERE tarea_id = ?', [queda, id]);
-    await conn.query('UPDATE pistas_ia SET tarea_id = ? WHERE tarea_id = ?', [queda, id]);
-    await conn.query('UPDATE IGNORE sabotajes SET tarea_original_id = ? WHERE tarea_original_id = ?', [queda, id]);
-    await conn.query('DELETE FROM tareas WHERE id = ?', [id]);
+    // (el antiguo UPDATE IGNORE: solo se mueven las filas que no chocan con una que ya existe)
+    await conn.query(
+      `UPDATE tareas_usuarios tu SET tarea_id = $1 WHERE tu.tarea_id = $2
+         AND NOT EXISTS (SELECT 1 FROM tareas_usuarios o WHERE o.usuario_id = tu.usuario_id AND o.tarea_id = $1)`,
+      [queda, id]
+    );
+    await conn.query('DELETE FROM tareas_usuarios WHERE tarea_id = $1', [id]);
+    await conn.query('UPDATE intentos SET tarea_id = $1 WHERE tarea_id = $2', [queda, id]);
+    await conn.query('UPDATE pistas_ia SET tarea_id = $1 WHERE tarea_id = $2', [queda, id]);
+    await conn.query(
+      `UPDATE sabotajes s SET tarea_original_id = $1 WHERE s.tarea_original_id = $2
+         AND NOT EXISTS (SELECT 1 FROM sabotajes o WHERE o.tarea_original_id = $1 AND o.hash = s.hash)`,
+      [queda, id]
+    );
+    await conn.query('DELETE FROM tareas WHERE id = $1', [id]);
     console.log(`Reto diario repetido ${id} («${titulo}») unido al ${queda}`);
   }
 }
 
 // Idempotente: no repite un reto que ya exista con el mismo título
-async function sembrarRetosDiarios(conn: any) {
-  const [cat] = await conn.query("SELECT id FROM categorias WHERE nombre = 'Reto Diario'") as any[];
-  const [niv] = await conn.query("SELECT id FROM niveles WHERE nombre = 'Reto Diario'") as any[];
-  if (!(cat as any[]).length || !(niv as any[]).length) return;
+async function sembrarRetosDiarios(conn: Conexion) {
+  const cat = await conn.query("SELECT id FROM categorias WHERE nombre = 'Reto Diario'");
+  const niv = await conn.query("SELECT id FROM niveles WHERE nombre = 'Reto Diario'");
+  if (!cat.length || !niv.length) return;
   for (const r of retosDiariosNuevos) {
-    const [existe] = await conn.query('SELECT id FROM tareas WHERE titulo = ?', [r.titulo]) as any[];
-    if ((existe as any[]).length) continue;
-    const [res] = await conn.query(
+    const existe = await conn.query('SELECT id FROM tareas WHERE titulo = $1', [r.titulo]);
+    if (existe.length) continue;
+    const [nueva] = await conn.query(
       `INSERT INTO tareas (categoria_id, nivel_id, titulo, descripcion, codigo_base, resultado_esperado, solucion, puntos_base, tipo)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 1000, 'codigo')`,
-      [(cat as any[])[0].id, (niv as any[])[0].id, r.titulo, r.descripcion, r.codigoBase, r.resultadoEsperado, r.solucion]
-    ) as any[];
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 1000, 'codigo') RETURNING id`,
+      [cat[0].id, niv[0].id, r.titulo, r.descripcion, r.codigoBase, r.resultadoEsperado, r.solucion]
+    );
     for (const [orden, t] of r.tests.entries()) {
       await conn.query(
         `INSERT INTO tests_tarea (tarea_id, descripcion, codigo_test, salida_esperada, oculto, orden)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [(res as any).insertId, t.descripcion, t.codigo || null, t.salida, t.oculto ? 1 : 0, orden]
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [nueva.id, t.descripcion, t.codigo || null, t.salida, !!t.oculto, orden]
       );
     }
   }
@@ -268,54 +201,53 @@ async function sembrarRetosDiarios(conn: any) {
 
 // Solo toca cada ejercicio si sigue teniendo su título original: si alguien lo ha cambiado a mano
 // desde el panel, se respeta y se avisa. Los tests solo se añaden si la tarea no tenía ninguno.
-async function revisarEjercicios(conn: any) {
+async function revisarEjercicios(conn: Conexion) {
   for (const e of ejerciciosRevisados) {
-    const [filas] = await conn.query('SELECT titulo FROM tareas WHERE id = ?', [e.id]) as any[];
-    const actual = (filas as any[])[0];
+    const [actual] = await conn.query('SELECT titulo FROM tareas WHERE id = $1', [e.id]);
     if (!actual) continue;
     // Algunos títulos de la BD original llevan un salto de línea al final
     if (String(actual.titulo).trim() !== e.tituloAntes) {
       console.warn(`Ejercicio ${e.id} no revisado: su título ya no es «${e.tituloAntes}»`);
       continue;
     }
-    const [cat] = await conn.query('SELECT id FROM categorias WHERE nombre = ?', [e.categoria]) as any[];
+    const cat = await conn.query('SELECT id FROM categorias WHERE nombre = $1', [e.categoria]);
     await conn.query(
-      `UPDATE tareas SET titulo = ?, descripcion = ?, codigo_base = ?, resultado_esperado = ?, solucion = ?,
-         categoria_id = COALESCE(?, categoria_id)
-       WHERE id = ?`,
-      [e.titulo, e.descripcion, e.codigoBase, e.resultadoEsperado, e.solucion, (cat as any[])[0]?.id ?? null, e.id]
+      `UPDATE tareas SET titulo = $1, descripcion = $2, codigo_base = $3, resultado_esperado = $4, solucion = $5,
+         categoria_id = COALESCE($6, categoria_id)
+       WHERE id = $7`,
+      [e.titulo, e.descripcion, e.codigoBase, e.resultadoEsperado, e.solucion, cat[0]?.id ?? null, e.id]
     );
-    const [tests] = await conn.query('SELECT COUNT(*) AS n FROM tests_tarea WHERE tarea_id = ?', [e.id]) as any[];
-    if (Number((tests as any[])[0].n) > 0) continue;
+    const [tests] = await conn.query('SELECT COUNT(*) AS n FROM tests_tarea WHERE tarea_id = $1', [e.id]);
+    if (Number(tests.n) > 0) continue;
     for (const [orden, t] of e.tests.entries()) {
       await conn.query(
         `INSERT INTO tests_tarea (tarea_id, descripcion, codigo_test, salida_esperada, oculto, orden)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [e.id, t.descripcion, t.codigo || null, t.salida, t.oculto ? 1 : 0, orden]
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [e.id, t.descripcion, t.codigo || null, t.salida, !!t.oculto, orden]
       );
     }
   }
   await conn.query(
-    "UPDATE tareas SET solucion = ? WHERE titulo = 'Invertir un Árbol Binario' AND solucion NOT LIKE '%class Nodo%'",
+    "UPDATE tareas SET solucion = $1 WHERE titulo = 'Invertir un Árbol Binario' AND solucion NOT LIKE '%class Nodo%'",
     [solucionArbolBinario]
   );
 }
 
 // Siembra retos de la fase 5 (idempotente: no repite los que ya existen por título)
-async function sembrarRetos(conn: any, retos: RetoSemilla[]) {
+async function sembrarRetos(conn: Conexion, retos: RetoSemilla[]) {
   for (const r of retos) {
-    const [existe] = await conn.query("SELECT id FROM tareas WHERE titulo = ? AND tipo = 'reto'", [r.titulo]) as any[];
-    if ((existe as any[]).length) continue;
-    const [cat] = await conn.query('SELECT id FROM categorias WHERE nombre = ?', [r.categoria]) as any[];
-    const [niv] = await conn.query('SELECT id FROM niveles WHERE nombre = ?', [r.nivel]) as any[];
-    if (!(cat as any[]).length || !(niv as any[]).length) {
+    const existe = await conn.query("SELECT id FROM tareas WHERE titulo = $1 AND tipo = 'reto'", [r.titulo]);
+    if (existe.length) continue;
+    const cat = await conn.query('SELECT id FROM categorias WHERE nombre = $1', [r.categoria]);
+    const niv = await conn.query('SELECT id FROM niveles WHERE nombre = $1', [r.nivel]);
+    if (!cat.length || !niv.length) {
       console.warn(`Reto «${r.titulo}» omitido: no existe la categoría o el nivel`);
       continue;
     }
     await conn.query(
       `INSERT INTO tareas (categoria_id, nivel_id, titulo, descripcion, codigo_base, resultado_esperado, solucion, puntos_base, tipo, config)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'reto', ?)`,
-      [(cat as any[])[0].id, (niv as any[])[0].id, r.titulo, r.descripcion, r.codigoBase, r.resultadoEsperado,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'reto', $9)`,
+      [cat[0].id, niv[0].id, r.titulo, r.descripcion, r.codigoBase, r.resultadoEsperado,
        r.solucion, r.puntos, JSON.stringify(r.config)]
     );
   }
@@ -383,16 +315,16 @@ export const retosDePrueba = [
 
 export async function sembrarRetosDePrueba() {
   if (process.env.RETOS_DE_PRUEBA !== '1') return;
-  const [cat] = await pool.query("SELECT id FROM categorias WHERE nombre = 'Funciones'") as any[];
-  const [niv] = await pool.query("SELECT id FROM niveles WHERE nombre = 'Fácil'") as any[];
-  if (!(cat as any[]).length || !(niv as any[]).length) return;
+  const cat = await query("SELECT id FROM categorias WHERE nombre = 'Funciones'");
+  const niv = await query("SELECT id FROM niveles WHERE nombre = 'Fácil'");
+  if (!cat.length || !niv.length) return;
   for (const r of retosDePrueba) {
-    const [existe] = await pool.query("SELECT id FROM tareas WHERE titulo = ? AND tipo = 'reto'", [r.titulo]) as any[];
-    if ((existe as any[]).length) continue;
-    await pool.query(
+    const existe = await query("SELECT id FROM tareas WHERE titulo = $1 AND tipo = 'reto'", [r.titulo]);
+    if (existe.length) continue;
+    await query(
       `INSERT INTO tareas (categoria_id, nivel_id, titulo, descripcion, codigo_base, resultado_esperado, solucion, puntos_base, tipo, config)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 10, 'reto', ?)`,
-      [(cat as any[])[0].id, (niv as any[])[0].id, r.titulo, r.descripcion, r.codigoBase,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 10, 'reto', $8)`,
+      [cat[0].id, niv[0].id, r.titulo, r.descripcion, r.codigoBase,
        'Superar todos los escenarios (algunos ocultos).', r.solucion, JSON.stringify(r.config)]
     );
   }
@@ -403,31 +335,31 @@ export async function sembrarRetosDePrueba() {
 const RETENCION_INTENTOS_DIAS = Number(process.env.RETENCION_INTENTOS_DIAS || 180);
 
 export async function limpiarIntentosAntiguos() {
-  await pool.query('DELETE FROM intentos WHERE creado_el < NOW() - INTERVAL ? DAY', [RETENCION_INTENTOS_DIAS]);
+  await query("DELETE FROM intentos WHERE creado_el < now() - make_interval(days => $1)", [RETENCION_INTENTOS_DIAS]);
 }
 
+// Número cualquiera, pero fijo: con este candado, dos arranques a la vez no aplican la misma migración
+const CANDADO_MIGRACIONES = 20261030;
+
 export async function aplicarMigraciones() {
-  await pool.query(`
+  await query(`
     CREATE TABLE IF NOT EXISTS schema_migrations (
       id VARCHAR(100) PRIMARY KEY,
-      aplicada_el TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      aplicada_el TIMESTAMPTZ DEFAULT now()
     )
   `);
-
-  const [filas] = await pool.query('SELECT id FROM schema_migrations') as any[];
-  const aplicadas = new Set((filas as any[]).map((f) => f.id));
+  await query('ALTER TABLE schema_migrations ENABLE ROW LEVEL SECURITY');
 
   for (const migracion of migraciones) {
-    if (aplicadas.has(migracion.id)) continue;
-    console.log(`Aplicando migración ${migracion.id}...`);
-    const conn = await pool.getConnection();
-    try {
+    await transaction(async (conn) => {
+      await conn.query('SELECT pg_advisory_xact_lock($1)', [CANDADO_MIGRACIONES]);
+      const aplicada = await conn.query('SELECT 1 FROM schema_migrations WHERE id = $1', [migracion.id]);
+      if (aplicada.length) return;
+      console.log(`Aplicando migración ${migracion.id}...`);
       if (migracion.sql) await conn.query(migracion.sql);
       if (migracion.run) await migracion.run(conn);
-      await conn.query('INSERT INTO schema_migrations (id) VALUES (?)', [migracion.id]);
-    } finally {
-      conn.release();
-    }
+      await conn.query('INSERT INTO schema_migrations (id) VALUES ($1)', [migracion.id]);
+    });
   }
 }
 
@@ -435,15 +367,12 @@ export async function aplicarMigraciones() {
 export const emailsAdmin = () =>
   (process.env.ADMIN_EMAILS || '')
     .split(',')
-    .map((e) => e.trim())
+    .map((e) => e.trim().toLowerCase())
     .filter(Boolean);
 
 export async function sincronizarAdmins() {
   const emails = emailsAdmin();
   if (emails.length === 0) return;
 
-  await pool.query(
-    `UPDATE usuarios SET rol = 'admin' WHERE correo_electronico IN (${emails.map(() => '?').join(',')})`,
-    emails
-  );
+  await query("UPDATE usuarios SET rol = 'admin' WHERE lower(correo_electronico) = ANY($1)", [emails]);
 }

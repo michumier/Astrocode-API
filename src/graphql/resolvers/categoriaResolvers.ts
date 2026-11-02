@@ -1,4 +1,4 @@
-import { query } from '../../config/db';
+import { query, ejecutar } from '../../config/db';
 import { GraphQLError } from 'graphql';
 import { UserInputError, Context, requireAdmin } from '../errors';
 
@@ -28,7 +28,7 @@ export const categoriaResolvers = {
     // Obtener una categoría por ID
     categoria: async (_: any, { id }: { id: string }) => {
       try {
-        const result = await query('SELECT id, nombre, descripcion FROM categorias WHERE id = ?', [id]) as any[];
+        const result = await query('SELECT id, nombre, descripcion FROM categorias WHERE id = $1', [id]) as any[];
         
         if (result.length === 0) {
           throw new UserInputError('Categoría no encontrada');
@@ -48,7 +48,7 @@ export const categoriaResolvers = {
     categoriasPorNombre: async (_: any, { nombre }: { nombre: string }) => {
       try {
         const result = await query(
-          'SELECT id, nombre, descripcion FROM categorias WHERE nombre LIKE ? ORDER BY nombre',
+          'SELECT id, nombre, descripcion FROM categorias WHERE nombre ILIKE $1 ORDER BY nombre',
           [`%${nombre}%`]
         ) as any[];
         return result;
@@ -79,7 +79,7 @@ export const categoriaResolvers = {
       try {
         // Verificar que no exista una categoría con el mismo nombre
         const existingCategory = await query(
-          'SELECT id FROM categorias WHERE nombre = ?',
+          'SELECT id FROM categorias WHERE lower(nombre) = lower($1)',
           [nombre.trim()]
         ) as any[];
 
@@ -87,16 +87,10 @@ export const categoriaResolvers = {
           throw new UserInputError('Ya existe una categoría con ese nombre');
         }
 
-        // Crear la nueva categoría
-        const result = await query(
-          'INSERT INTO categorias (nombre, descripcion) VALUES (?, ?)',
-          [nombre.trim(), descripcion || null]
-        ) as any;
-
-        // Obtener la categoría creada
+        // Crear la nueva categoría y devolverla
         const newCategory = await query(
-          'SELECT id, nombre, descripcion FROM categorias WHERE id = ?',
-          [result.insertId]
+          'INSERT INTO categorias (nombre, descripcion) VALUES ($1, $2) RETURNING id, nombre, descripcion',
+          [nombre.trim(), descripcion || null]
         ) as any[];
 
         return newCategory[0];
@@ -133,7 +127,7 @@ export const categoriaResolvers = {
       try {
         // Verificar que la categoría existe
         const categoryExists = await query(
-          'SELECT id FROM categorias WHERE id = ?',
+          'SELECT id FROM categorias WHERE id = $1',
           [id]
         ) as any[];
 
@@ -144,7 +138,7 @@ export const categoriaResolvers = {
         // Verificar que no exista otra categoría con el mismo nombre (si se está actualizando el nombre)
         if (nombre) {
           const existingCategory = await query(
-            'SELECT id FROM categorias WHERE nombre = ? AND id != ?',
+            'SELECT id FROM categorias WHERE lower(nombre) = lower($1) AND id != $2',
             [nombre.trim(), id]
           ) as any[];
 
@@ -158,23 +152,23 @@ export const categoriaResolvers = {
         const valores: any[] = [];
 
         if (nombre) {
-          campos.push('nombre = ?');
           valores.push(nombre.trim());
+          campos.push(`nombre = $${valores.length}`);
         }
 
         if (descripcion !== undefined) {
-          campos.push('descripcion = ?');
           valores.push(descripcion);
+          campos.push(`descripcion = $${valores.length}`);
         }
 
         valores.push(id);
-        const updateQuery = `UPDATE categorias SET ${campos.join(', ')} WHERE id = ?`;
+        const updateQuery = `UPDATE categorias SET ${campos.join(', ')} WHERE id = $${valores.length}`;
 
         await query(updateQuery, valores);
 
         // Obtener la categoría actualizada
         const updatedCategory = await query(
-          'SELECT id, nombre, descripcion FROM categorias WHERE id = ?',
+          'SELECT id, nombre, descripcion FROM categorias WHERE id = $1',
           [id]
         ) as any[];
 
@@ -200,7 +194,7 @@ export const categoriaResolvers = {
       try {
         // Verificar que la categoría existe
         const categoryExists = await query(
-          'SELECT id FROM categorias WHERE id = ?',
+          'SELECT id FROM categorias WHERE id = $1',
           [id]
         ) as any[];
 
@@ -210,7 +204,7 @@ export const categoriaResolvers = {
 
         // Verificar si hay tareas asociadas a esta categoría
         const associatedTasks = await query(
-          'SELECT id FROM tareas WHERE categoria_id = ? LIMIT 1',
+          'SELECT id FROM tareas WHERE categoria_id = $1 LIMIT 1',
           [id]
         ) as any[];
 
@@ -219,12 +213,7 @@ export const categoriaResolvers = {
         }
 
         // Eliminar la categoría
-        const result = await query(
-          'DELETE FROM categorias WHERE id = ?',
-          [id]
-        ) as any;
-
-        return result.affectedRows > 0;
+        return (await ejecutar('DELETE FROM categorias WHERE id = $1', [id])) > 0;
       } catch (error) {
         if (error instanceof GraphQLError) {
           throw error;
