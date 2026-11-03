@@ -412,6 +412,19 @@ Paso previo para desplegar gratis en Vercel + Supabase: la base de datos pasa a 
 
 ---
 
+## Fase 9 — 🚀 Despliegue gratuito (Vercel + Supabase)
+
+AstroCode en internet sin gastar nada: web, API y ejecutor en Vercel Hobby y base de datos en Supabase Free, sin tarjeta. Guía en `docs/DESPLIEGUE.md`.
+
+### Tareas
+- [x] 9.1 API como función de Vercel (app exportada, arranque perezoso, migraciones baratas en frío, trust proxy) (M)
+- [x] 9.2 Runner en Vercel con aislador (audit hook: sin red, procesos, ctypes ni /proc) y token entre la API y el runner (M)
+- [x] 9.3 Web en Vercel con rutas de la app y caché de estáticos (S)
+- [x] 9.4 Proyectos de Vercel y Supabase, variables y primer despliegue; pruebas en `docs/pruebas/fase-9.md` (M)
+- [ ] 9.5 Prueba completa con cuenta en la web publicada y fusión en `main` (S)
+
+---
+
 ## Reglas para todas las fases
 - **Rama `feature/` por fase** (`feature/fase-1-sabotaje`…) en cada repo afectado. Claude prepara la PR y Miguel revisa y fusiona.
 - **Plan de pruebas obligatorio al terminar cada fase** (`docs/pruebas/fase-N.md` en la API): pruebas automáticas y manuales con su resultado. **No se pasa a la siguiente fase sin ejecutarlo entero en verde.**
