@@ -23,9 +23,48 @@ services:
       # Retos de calibración del motor (fase 5.0)
       - RETOS_DE_PRUEBA=1
       - RUNNER_TOKEN=token-e2e
+      # Sin los candados de la ruta: el resto de pruebas envía soluciones a tareas sueltas.
+      # Los candados se prueban contra astrocode-api-ruta (test/e2e/16-ruta.test.mjs)
+      - RUTA_CANDADOS=0
     depends_on:
       mock-ia:
         condition: service_started
+  # La misma API y la misma base de datos, pero CON los candados de la ruta (fase 11)
+  astrocode-api-ruta:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dev
+    env_file: .env
+    ports:
+      - "127.0.0.1:${E2E_API_RUTA_PORT:-4101}:4000"
+    environment:
+      - NODE_ENV=development
+      - PORT=4000
+      - DB_HOST=postgres-db
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_NAME=${DB_NAME:-astrocodebd}
+      - PYTHON_RUNNER_URL=http://python-runner:5000
+      - RUNNER_TOKEN=token-e2e
+      - NVIDIA_API_KEY=clave-falsa-de-prueba
+      - NVIDIA_BASE_URL=http://mock-ia:8787/v1
+      - ADMIN_EMAILS=admin-e2e@example.test
+      - RATE_LIMIT_PER_MIN=5000
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4000/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 20s
+    depends_on:
+      postgres-db:
+        condition: service_healthy
+      python-runner:
+        condition: service_started
+    networks:
+      - backend
+      - runner
   astrocode-web:
     container_name: !reset null
   mock-ia:

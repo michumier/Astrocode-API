@@ -7,6 +7,7 @@ import path from 'node:path';
 
 const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const puerto = process.env.E2E_API_PORT || '4100';
+const puertoRuta = process.env.E2E_API_RUTA_PORT || '4101';
 const compose = ['compose', '-p', 'astrocode-e2e', '-f', 'docker-compose.yml', '-f', 'test/e2e/compose.e2e.yml'];
 
 const ejecutar = (cmd, args, env = {}) => {
@@ -19,9 +20,9 @@ if (!existsSync(path.join(raiz, '.env'))) {
   copyFileSync(path.join(raiz, '.env.example'), path.join(raiz, '.env'));
 }
 
-let codigo = ejecutar('docker', [...compose, 'up', '-d', '--build', '--wait', 'astrocode-api', 'mock-ia'], { E2E_API_PORT: puerto });
+let codigo = ejecutar('docker', [...compose, 'up', '-d', '--build', '--wait', 'astrocode-api', 'astrocode-api-ruta', 'mock-ia'], { E2E_API_PORT: puerto, E2E_API_RUTA_PORT: puertoRuta });
 if (codigo === 0) {
-  codigo = ejecutar('npm', ['run', 'test:e2e'], { API_URL: `http://localhost:${puerto}/graphql` });
+  codigo = ejecutar('npm', ['run', 'test:e2e'], { API_URL: `http://localhost:${puerto}/graphql`, API_RUTA_URL: `http://localhost:${puertoRuta}/graphql` });
   if (codigo !== 0) {
     ejecutar('docker', [...compose, 'logs', '--tail', '80', 'astrocode-api']);
   }

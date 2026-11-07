@@ -201,19 +201,6 @@ export async function publicarSabotaje(sabotajeId: string | number, contexto?: s
   });
 }
 
-/** ¿Puede el usuario abrir esta tarea? Los sabotajes se desbloquean al completar la original. */
-export async function puedeAbrirTarea(usuario: any, tarea: { id: any; tipo?: string; config?: any }): Promise<boolean> {
-  if (tarea.tipo !== 'sabotaje') return true;
-  if (usuario?.rol === 'admin') return true;
-  if (!usuario) return false;
-  const config = typeof tarea.config === 'string' ? JSON.parse(tarea.config) : tarea.config || {};
-  const filas = await query(
-    'SELECT 1 FROM tareas_usuarios WHERE usuario_id = $1 AND tarea_id = $2',
-    [usuario.id, config.tareaOriginalId]
-  ) as any[];
-  return filas.length > 0;
-}
-
 export async function sabotajePorTarea(tareaId: string | number) {
   const filas = await query('SELECT * FROM sabotajes WHERE tarea_id = $1', [tareaId]) as any[];
   return filas[0] || null;

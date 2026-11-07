@@ -6,6 +6,8 @@ services:
   astrocode-api:
     environment:
       - CORS_ORIGIN=http://localhost:3100
+      # Con los candados de la ruta, como en producción (las e2e los quitan)
+      - RUTA_CANDADOS=1
   astrocode-web:
     ports: !override
       - "127.0.0.1:3100:3000"

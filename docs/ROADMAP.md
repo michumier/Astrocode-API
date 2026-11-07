@@ -421,7 +421,19 @@ AstroCode en internet sin gastar nada: web, API y ejecutor en Vercel Hobby y bas
 - [x] 9.2 Runner en Vercel con aislador (audit hook: sin red, procesos, ctypes ni /proc) y token entre la API y el runner (M)
 - [x] 9.3 Web en Vercel con rutas de la app y caché de estáticos (S)
 - [x] 9.4 Proyectos de Vercel y Supabase, variables y primer despliegue; pruebas en `docs/pruebas/fase-9.md` (M)
-- [ ] 9.5 Prueba completa con cuenta en la web publicada y fusión en `main` (S)
+- [x] 9.5 Fusión en `main`: Vercel despliega solo con cada push (S)
+
+---
+
+## Fases 10–14 — 🧭 Ruta de aprendizaje
+
+Quien empieza de cero se perdía: la teoría era un temario aparte y los ejercicios de cada planeta iban en un orden casual. Cada planeta pasa a ser un tema, con lecciones cortas entre ejercicio y ejercicio, un orden fijo sin saltos y un «por qué» en cada ejercicio. El diseño completo está en `docs/TEMARIO.md`.
+
+- [x] **10 · Temario**: conceptos por planeta, orden de los 38 ejercicios (25 cambian de planeta), 28 lecciones, 6 huecos, puntos y una lección de ejemplo (S)
+- [x] **11 · Ruta y candados**: orden explícito por planeta en la BD, candados en la API y la web, planetas que se abren al terminar el anterior, bonus de planeta y migración de cuentas con progreso (M)
+- [ ] **12 · Lecciones**: pantalla de lección (explicación, «Pruébalo», pregunta), sus puntos, y las 16 lecciones de Mercurio, Venus y Tierra (L)
+- [ ] **13 · Contenido completo**: las 12 lecciones restantes, los 6 ejercicios nuevos y «qué practicas / por qué» en los 44 (L)
+- [ ] **14 · Biblioteca**: la Guía pasa a ser la biblioteca de lecciones vistas, más «Para ir más allá» (S)
 
 ---
 
