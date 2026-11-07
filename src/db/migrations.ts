@@ -408,13 +408,18 @@ const CANDADO_MIGRACIONES = 20261030;
 export async function aplicarMigraciones() {
   const [registro] = await query("SELECT to_regclass('public.schema_migrations') AS tabla");
   if (!registro.tabla) {
-    await query(`
-      CREATE TABLE IF NOT EXISTS schema_migrations (
-        id VARCHAR(100) PRIMARY KEY,
-        aplicada_el TIMESTAMPTZ DEFAULT now()
-      )
-    `);
-    await query('ALTER TABLE schema_migrations ENABLE ROW LEVEL SECURITY');
+    // Con el candado: dos arranques a la vez sobre una BD vacía chocaban aquí, porque
+    // CREATE TABLE IF NOT EXISTS no es seguro en paralelo en Postgres (duplicate key en pg_type)
+    await transaction(async (conn) => {
+      await conn.query('SELECT pg_advisory_xact_lock($1)', [CANDADO_MIGRACIONES]);
+      await conn.query(`
+        CREATE TABLE IF NOT EXISTS schema_migrations (
+          id VARCHAR(100) PRIMARY KEY,
+          aplicada_el TIMESTAMPTZ DEFAULT now()
+        )
+      `);
+      await conn.query('ALTER TABLE schema_migrations ENABLE ROW LEVEL SECURITY');
+    });
   }
 
   // Lo normal (y en cada arranque en frío de Vercel): ya están todas y basta con esta consulta
