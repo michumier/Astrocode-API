@@ -1,7 +1,7 @@
 import { query } from '../../config/db';
 import { Context, requireAuth, UserInputError, ForbiddenError } from '../errors';
 import { trazarCodigo, Traza } from '../../services/pythonRunner';
-import { puedeAbrirTarea } from '../../services/sabotajes';
+import { bloqueoDeTarea } from '../../services/ruta';
 
 const paraGraphQL = (t: Traza) => ({
   pasos: JSON.stringify(t.pasos || []),
@@ -28,7 +28,8 @@ export const cajaNegraResolvers = {
       const tarea = tareas[0];
       if (!tarea) throw new UserInputError('Tarea no encontrada');
       if (tarea.tipo === 'pilotaje' || tarea.tipo === 'reto') throw new UserInputError('Las misiones y los retos tienen su propio visor');
-      if (!(await puedeAbrirTarea(usuario, tarea))) throw new ForbiddenError('No puedes abrir esta tarea');
+      const bloqueo = await bloqueoDeTarea(usuario, tarea);
+      if (bloqueo) throw new ForbiddenError(bloqueo);
 
       // Solo los tests visibles: de los ocultos no se puede ver nada
       const visibles = await query(

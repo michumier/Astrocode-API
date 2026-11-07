@@ -4,7 +4,8 @@ import { clasificarError } from '../../services/errores';
 import { corregirMision, comoEjecucion, tipoErrorMision, misionParaGraphQL, infoMision, probarEscenario, esSimulacion, materialMision } from '../../services/misiones';
 import { GraphQLError } from 'graphql';
 import { UserInputError, ForbiddenError, Context, requireAuth, requireAdmin } from '../errors';
-import { puedeAbrirTarea, sabotajePorTarea, esArregloQuirurgico } from '../../services/sabotajes';
+import { sabotajePorTarea, esArregloQuirurgico } from '../../services/sabotajes';
+import { bloqueoDeTarea, conquistarSiCompleto } from '../../services/ruta';
 
 interface CrearTareaInput {
   categoriaId: string;
@@ -191,9 +192,8 @@ export const tareaResolvers = {
         }
         
         const tarea = result[0];
-        if (!(await puedeAbrirTarea(context.user, tarea))) {
-          throw new ForbiddenError('Completa primero el ejercicio original para desbloquear este sabotaje');
-        }
+        const bloqueo = await bloqueoDeTarea(context.user, tarea);
+        if (bloqueo) throw new ForbiddenError(bloqueo);
          return {
            ...tarea,
            puntosBase: tarea.puntos_base,
@@ -778,7 +778,8 @@ export const tareaResolvers = {
       const tarea = filas[0];
       if (!tarea) throw new UserInputError('Tarea no encontrada');
       if (!esSimulacion(tarea)) throw new UserInputError('Esta tarea no es una misión ni un reto');
-      if (!(await puedeAbrirTarea(usuario, tarea))) throw new ForbiddenError('No puedes abrir esta tarea');
+      const bloqueo = await bloqueoDeTarea(usuario, tarea);
+      if (bloqueo) throw new ForbiddenError(bloqueo);
       return misionParaGraphQL(await probarEscenario(tarea, codigo, escenario));
     },
 
@@ -799,9 +800,8 @@ export const tareaResolvers = {
       }
 
       const tarea = tareaInfo[0];
-      if (!(await puedeAbrirTarea(usuario, tarea))) {
-        throw new ForbiddenError('Completa primero el ejercicio original para desbloquear este sabotaje');
-      }
+      const bloqueo = await bloqueoDeTarea(usuario, tarea);
+      if (bloqueo) throw new ForbiddenError(bloqueo);
       // Las misiones y los retos se corrigen simulando sus escenarios; el resto, con tests o salida
       const mision = esSimulacion(tarea) ? await corregirMision(tarea, codigo) : null;
       const { correcto, ejecucion, tests } = mision
@@ -842,6 +842,8 @@ export const tareaResolvers = {
         revelacion: null as any,
         insigniasNuevas: [] as string[],
         mision: mision ? misionParaGraphQL(mision) : null,
+        // Ruta (fase 11): si con esta tarea se completa su planeta, la conquista y su bonus
+        planetaConquistado: null as { clave: string; nombre: string; puntos: number } | null,
       };
 
       if (!correcto) {
@@ -907,6 +909,12 @@ export const tareaResolvers = {
         } catch (error) {
           console.error('No se pudo dar la insignia Cirujano:', error);
         }
+      }
+
+      try {
+        respuesta.planetaConquistado = await conquistarSiCompleto(usuario.id, tarea.id);
+      } catch (error) {
+        console.error('No se pudo apuntar la conquista del planeta:', error);
       }
 
       return {

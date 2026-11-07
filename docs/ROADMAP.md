@@ -430,7 +430,7 @@ AstroCode en internet sin gastar nada: web, API y ejecutor en Vercel Hobby y bas
 Quien empieza de cero se perdía: la teoría era un temario aparte y los ejercicios de cada planeta iban en un orden casual. Cada planeta pasa a ser un tema, con lecciones cortas entre ejercicio y ejercicio, un orden fijo sin saltos y un «por qué» en cada ejercicio. El diseño completo está en `docs/TEMARIO.md`.
 
 - [x] **10 · Temario**: conceptos por planeta, orden de los 38 ejercicios (25 cambian de planeta), 28 lecciones, 6 huecos, puntos y una lección de ejemplo (S)
-- [ ] **11 · Ruta y candados**: orden explícito por planeta en la BD, candados en la API y la web, planetas que se abren al terminar el anterior, bonus de planeta y migración de cuentas con progreso (M)
+- [x] **11 · Ruta y candados**: orden explícito por planeta en la BD, candados en la API y la web, planetas que se abren al terminar el anterior, bonus de planeta y migración de cuentas con progreso (M)
 - [ ] **12 · Lecciones**: pantalla de lección (explicación, «Pruébalo», pregunta), sus puntos, y las 16 lecciones de Mercurio, Venus y Tierra (L)
 - [ ] **13 · Contenido completo**: las 12 lecciones restantes, los 6 ejercicios nuevos y «qué practicas / por qué» en los 44 (L)
 - [ ] **14 · Biblioteca**: la Guía pasa a ser la biblioteca de lecciones vistas, más «Para ir más allá» (S)

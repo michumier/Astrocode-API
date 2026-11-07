@@ -2,7 +2,8 @@ import { query, INICIO_DIA_UTC } from '../../config/db';
 import { Context, requireAuth, requireAdmin, UserInputError, ForbiddenError } from '../errors';
 import { iaDisponible, generarPista, generarEjercicio, EjercicioIA } from '../../services/ia';
 import { ejecutarPython, normalizarSalida } from '../../services/pythonRunner';
-import { puedeAbrirTarea, sabotajePorTarea } from '../../services/sabotajes';
+import { sabotajePorTarea } from '../../services/sabotajes';
+import { bloqueoDeTarea } from '../../services/ruta';
 
 const PISTAS_POR_DIA = Number(process.env.PISTAS_POR_DIA || 20);
 
@@ -55,9 +56,8 @@ export const iaResolvers = {
         throw new UserInputError('Tarea no encontrada');
       }
       const tarea = tareas[0];
-      if (!(await puedeAbrirTarea(usuario, tarea))) {
-        throw new ForbiddenError('Completa primero el ejercicio original para desbloquear este sabotaje');
-      }
+      const bloqueo = await bloqueoDeTarea(usuario, tarea);
+      if (bloqueo) throw new ForbiddenError(bloqueo);
       const sabotaje = tarea.tipo === 'sabotaje' ? await sabotajePorTarea(tarea.id) : null;
       const configTarea = typeof tarea.config === 'string' ? JSON.parse(tarea.config) : tarea.config;
 

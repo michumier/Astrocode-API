@@ -201,6 +201,8 @@ export const tareaTypeDefs = gql`
     insigniasNuevas: [String!]!
     # Solo en misiones de pilotaje
     mision: ResultadoMision
+    # Si con esta tarea se completa su planeta de la ruta (una sola vez)
+    planetaConquistado: PlanetaConquistado
     tests: ResultadoTests
     yaCompletada: Boolean!
     puntos: Int!
