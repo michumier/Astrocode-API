@@ -25,13 +25,13 @@ async function alumno() {
   return r.data.login.token;
 }
 
-const RUTA = `{ ruta { clave estado hechos total bonus pasos { orden estado tarea { id } } } }`;
+const RUTA = `{ ruta { clave estado hechos total bonus pasos { orden tipo estado tarea { id } leccion { id } } } }`;
 const ENVIAR = `mutation($id:ID!,$c:String!){ enviarSolucion(tareaId:$id, codigo:$c, tiempoCompletado:30){
   correcto puntos planetaConquistado { clave nombre puntos } } }`;
 const enviar = (token, id, codigo) => gql(ENVIAR, { id: String(id), c: codigo }, token);
 const puntos = async (token) => (await gql('{ me { puntos } }', {}, token)).data.me.puntos;
 
-// Soluciones de los 4 pasos de Mercurio (#1, #19, #4 y #2)
+// Soluciones de los 4 ejercicios de Mercurio (#1, #19, #4 y #2)
 const MERCURIO = [
   [1, 'print("=== REGISTRO DE COMANDANTE ESPACIAL ===")\nedad = 25\nprint(f"Edad del comandante: {edad} años terrestres")\nprint("Comandante registrado. ¡Listo para el despegue!")\n'],
   [19, 'print("Registro de nave espacial")\nnombre = "Estrella Polar"\ntipo = "Explorador"\ntripulacion = 5\ncombustible = 750\nprint(f"Nave {nombre} ({tipo}) — Tripulación: {tripulacion} — Combustible: {combustible}")\n'],
@@ -39,25 +39,42 @@ const MERCURIO = [
   [2, 'print("=== SISTEMA DE TELEMETRÍA ===")\nvelocidad = "2500"\ntemperatura = 98.6\ncoordenada_x = 42\nsistema_activo = 1\nvelocidad_num = int(velocidad)\ntemperatura_int = int(temperatura)\ncoordenada_txt = str(coordenada_x)\nactivo = bool(sistema_activo)\nprint(f"Velocidad: {velocidad_num} ({type(velocidad_num).__name__})")\nprint(f"Temperatura: {temperatura_int} ({type(temperatura_int).__name__})")\nprint(f"Coordenada X: {coordenada_txt!r} ({type(coordenada_txt).__name__})")\nprint(f"Sistema activo: {activo} ({type(activo).__name__})")\nprint(f"Distancia recorrida en 2 horas: {velocidad_num * 2} km")\n'],
 ];
 
-test('la ruta: 6 planetas en orden con sus bonus; quien empieza solo tiene abierto el primer paso', async () => {
+const SOLUCION = Object.fromEntries(MERCURIO);
+const RESPONDER = `mutation($id:ID!,$o:Int!){ responderLeccion(leccionId:$id, opcion:$o){ correcta puntos planetaConquistado { clave nombre puntos } } }`;
+
+// Responde una lección probando opciones hasta acertar (devuelve la respuesta buena)
+async function completarLeccion(token, id) {
+  for (let o = 0; o < 3; o++) {
+    const r = (await gql(RESPONDER, { id: String(id), o }, token)).data.responderLeccion;
+    if (r.correcta) return r;
+  }
+  throw new Error(`ninguna opción de la lección ${id} es correcta`);
+}
+
+test('la ruta: 6 planetas en orden con sus bonus; quien empieza solo tiene abierta la primera lección', async () => {
   const token = await alumno();
   const { data } = await gql(RUTA, {}, token);
   assert.deepEqual(data.ruta.map((p) => [p.clave, p.estado, p.bonus]), [
     ['mercurio', 'abierto', 100], ['venus', 'bloqueado', 150], ['tierra', 'bloqueado', 200],
     ['marte', 'bloqueado', 250], ['jupiter', 'bloqueado', 300], ['saturno', 'bloqueado', 400],
   ]);
-  assert.deepEqual(data.ruta.map((p) => p.total), [4, 6, 8, 5, 10, 5]);
-  assert.deepEqual(data.ruta[0].pasos.map((s) => [s.tarea.id, s.estado]),
-    [['1', 'siguiente'], ['19', 'bloqueado'], ['4', 'bloqueado'], ['2', 'bloqueado']]);
+  // Ejercicios + lecciones: Mercurio 4 + 5, Venus 6 + 5, Tierra 8 + 6 (el resto aún sin lecciones)
+  assert.deepEqual(data.ruta.map((p) => p.total), [9, 11, 14, 5, 10, 5]);
+  const pasos = data.ruta[0].pasos.map((s) => [s.tipo, s.tarea?.id ?? null, s.estado]);
+  assert.deepEqual(pasos.map(([tipo, id]) => [tipo, id]), [
+    ['leccion', null], ['leccion', null], ['tarea', '1'], ['leccion', null], ['tarea', '19'],
+    ['leccion', null], ['tarea', '4'], ['leccion', null], ['tarea', '2'],
+  ]);
+  assert.deepEqual(pasos.map(([, , e]) => e), ['siguiente', ...Array(8).fill('bloqueado')]);
 });
 
 test('no se puede saltar: ni abrir ni enviar un paso bloqueado, ni uno de un planeta cerrado', async () => {
   const token = await alumno();
-  const abrir = await gql('query($id:ID!){ tarea(id:$id){ id } }', { id: '19' }, token);
+  const abrir = await gql('query($id:ID!){ tarea(id:$id){ id } }', { id: '1' }, token);
   assert.equal(codigoError(abrir), 'FORBIDDEN');
   assert.match(abrir.errors[0].message, /pasos anteriores de Mercurio/);
 
-  const saltar = await enviar(token, 19, MERCURIO[1][1]);
+  const saltar = await enviar(token, 1, SOLUCION[1]);
   assert.equal(codigoError(saltar), 'FORBIDDEN');
 
   const otroPlaneta = await enviar(token, 55, 'def piloto(sensores):\n    return {"empuje": 1}\n');
@@ -69,30 +86,33 @@ test('no se puede saltar: ni abrir ni enviar un paso bloqueado, ni uno de un pla
   assert.equal(diario.errors, undefined);
 });
 
-test('paso a paso hasta conquistar Mercurio: bonus una sola vez y Venus se abre', async () => {
+test('paso a paso, lecciones incluidas, hasta conquistar Mercurio: bonus una sola vez y Venus se abre', async () => {
   const token = await alumno();
-  let r;
-  let deEjercicios = 0;
-  for (const [i, [id, codigo]] of MERCURIO.entries()) {
-    r = (await enviar(token, id, codigo)).data.enviarSolucion;
-    assert.equal(r.correcto, true, `paso ${id}`);
-    deEjercicios += r.puntos;
-    if (i < MERCURIO.length - 1) assert.equal(r.planetaConquistado, null);
+  const { data } = await gql(RUTA, {}, token);
+  let sumados = 0;
+  let ultimo;
+  for (const [i, s] of data.ruta[0].pasos.entries()) {
+    ultimo = s.tipo === 'leccion'
+      ? await completarLeccion(token, s.leccion.id)
+      : (await enviar(token, s.tarea.id, SOLUCION[s.tarea.id])).data.enviarSolucion;
+    assert.ok(ultimo.puntos > 0, `el paso ${i + 1} no ha dado puntos`);
+    sumados += ultimo.puntos;
+    if (i < data.ruta[0].pasos.length - 1) assert.equal(ultimo.planetaConquistado, null, `conquista antes de tiempo en el paso ${i + 1}`);
   }
-  assert.deepEqual(r.planetaConquistado, { clave: 'mercurio', nombre: 'Mercurio', puntos: 100 });
+  assert.deepEqual(ultimo.planetaConquistado, { clave: 'mercurio', nombre: 'Mercurio', puntos: 100 });
 
-  // Puntos: los de los 4 ejercicios más el bonus de Mercurio, una vez
-  const total = deEjercicios + 100;
+  // Puntos: los de los 9 pasos más el bonus de Mercurio, una vez
+  const total = sumados + 100;
   assert.equal(await puntos(token), total);
 
-  const { data } = await gql(RUTA, {}, token);
-  assert.equal(data.ruta[0].estado, 'conquistado');
-  assert.equal(data.ruta[0].hechos, 4);
-  assert.equal(data.ruta[1].estado, 'abierto');
-  assert.equal(data.ruta[1].pasos[0].estado, 'siguiente');
+  const despues = (await gql(RUTA, {}, token)).data;
+  assert.equal(despues.ruta[0].estado, 'conquistado');
+  assert.equal(despues.ruta[0].hechos, 9);
+  assert.equal(despues.ruta[1].estado, 'abierto');
+  assert.equal(despues.ruta[1].pasos[0].estado, 'siguiente');
 
   // Repetir un paso ya hecho no vuelve a dar el bonus
-  const repetido = (await enviar(token, 2, MERCURIO[3][1])).data.enviarSolucion;
+  const repetido = (await enviar(token, 2, SOLUCION[2])).data.enviarSolucion;
   assert.equal(repetido.planetaConquistado, null);
   assert.equal(await puntos(token), total);
 });

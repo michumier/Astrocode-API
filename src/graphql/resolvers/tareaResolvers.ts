@@ -912,7 +912,7 @@ export const tareaResolvers = {
       }
 
       try {
-        respuesta.planetaConquistado = await conquistarSiCompleto(usuario.id, tarea.id);
+        respuesta.planetaConquistado = await conquistarSiCompleto(usuario.id, { tareaId: tarea.id });
       } catch (error) {
         console.error('No se pudo apuntar la conquista del planeta:', error);
       }

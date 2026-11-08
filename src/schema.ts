@@ -8,6 +8,7 @@ import { iaTypeDefs } from './graphql/schemas/iaSchema';
 import { sabotajeTypeDefs } from './graphql/schemas/sabotajeSchema';
 import { cajaNegraTypeDefs } from './graphql/schemas/cajaNegraSchema';
 import { rutaTypeDefs } from './graphql/schemas/rutaSchema';
+import { leccionTypeDefs } from './graphql/schemas/leccionSchema';
 
 const baseTypeDefs = gql`
   type Query {
@@ -19,4 +20,4 @@ const baseTypeDefs = gql`
   }
 `;
 
-export const typeDefs = [baseTypeDefs, userTypeDefs, categoriaTypeDefs, nivelTypeDefs, tareaTypeDefs, codeExecutionTypeDefs, iaTypeDefs, sabotajeTypeDefs, cajaNegraTypeDefs, rutaTypeDefs];
+export const typeDefs = [baseTypeDefs, userTypeDefs, categoriaTypeDefs, nivelTypeDefs, tareaTypeDefs, codeExecutionTypeDefs, iaTypeDefs, sabotajeTypeDefs, cajaNegraTypeDefs, rutaTypeDefs, leccionTypeDefs];
