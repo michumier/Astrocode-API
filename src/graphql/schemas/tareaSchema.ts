@@ -23,6 +23,10 @@ export const tareaTypeDefs = gql`
     puntosBonus: Int!
     codigoBase: String
     resultadoEsperado: String
+    # Ruta (fase 13): qué se practica, por qué importa y la lección que lo explica (la anterior en su planeta)
+    practica: String
+    porque: String
+    leccionRepaso: Leccion
   }
 
   input CrearTareaInput {
