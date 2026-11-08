@@ -67,3 +67,18 @@ test('un planeta sin pasos no se da por conquistado', () => {
   const r = calcularRuta(PLANETAS, [], new Set(), new Set(), true);
   assert.deepEqual(r.map((p) => p.estado), ['abierto', 'bloqueado', 'bloqueado']);
 });
+
+test('las lecciones son pasos como los demás: cuentan para avanzar y para conquistar', () => {
+  const pasos = [
+    { planeta: 'mercurio', orden: 1, tipo: 'leccion', tareaId: null, leccionId: 100 },
+    { planeta: 'mercurio', orden: 3, tipo: 'tarea', tareaId: 1, leccionId: null },
+    { planeta: 'venus', orden: 1, tipo: 'leccion', tareaId: null, leccionId: 200 },
+  ];
+  const r = (hechas, leidas) => estados(calcularRuta(PLANETAS, pasos, new Set(hechas), new Set(), true, new Set(leidas)));
+  assert.equal(r([], []).mercurio, 'abierto: siguiente,bloqueado');
+  assert.equal(r([], [100]).mercurio, 'abierto: hecho,siguiente');
+  // La tarea sola no basta: falta la lección
+  assert.equal(r([1], []).mercurio, 'abierto: siguiente,hecho');
+  assert.equal(r([1], [100]).mercurio, 'conquistado: hecho,hecho');
+  assert.equal(r([1], [100]).venus, 'abierto: siguiente');
+});

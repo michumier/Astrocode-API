@@ -10,6 +10,11 @@ export const rutaResolvers = {
     ruta: async (_: any, __: any, context: Context) => {
       const ruta = await rutaDeUsuario(context.user);
       const ids = ruta.flatMap((p) => p.pasos.map((s) => s.tareaId)).filter((id): id is number => id !== null);
+      const idsLecciones = ruta.flatMap((p) => p.pasos.map((s) => s.leccionId)).filter((id): id is number => id !== null);
+      const lecciones = new Map<number, any>();
+      if (idsLecciones.length) {
+        for (const l of await query('SELECT id, titulo FROM lecciones WHERE id = ANY($1)', [idsLecciones])) lecciones.set(l.id, l);
+      }
       const tareas = new Map<number, any>();
       if (ids.length) {
         for (const t of await query(`SELECT ${CAMPOS_TAREA} FROM tareas WHERE id = ANY($1)`, [ids])) {
@@ -23,7 +28,11 @@ export const rutaResolvers = {
         ...p,
         hechos: p.pasos.filter((s) => s.estado === 'hecho').length,
         total: p.pasos.length,
-        pasos: p.pasos.map((s) => ({ ...s, tarea: s.tareaId !== null ? tareas.get(s.tareaId) || null : null })),
+        pasos: p.pasos.map((s) => ({
+          ...s,
+          tarea: s.tareaId !== null ? tareas.get(s.tareaId) || null : null,
+          leccion: s.leccionId !== null ? lecciones.get(s.leccionId) || null : null,
+        })),
       }));
     },
   },

@@ -7,6 +7,7 @@ import { iaResolvers } from './iaResolvers';
 import { sabotajeResolvers } from './sabotajeResolvers';
 import { cajaNegraResolvers } from './cajaNegraResolvers';
 import { rutaResolvers } from './rutaResolvers';
+import { leccionResolvers } from './leccionResolvers';
 import { mergeResolvers } from '@graphql-tools/merge';
 
 const baseResolvers = {
@@ -18,6 +19,6 @@ const baseResolvers = {
   }
 };
 
-export const resolvers = mergeResolvers([baseResolvers, userResolvers, categoriaResolvers, nivelResolvers, tareaResolvers, codeExecutionResolvers, iaResolvers, sabotajeResolvers, cajaNegraResolvers, rutaResolvers]);
+export const resolvers = mergeResolvers([baseResolvers, userResolvers, categoriaResolvers, nivelResolvers, tareaResolvers, codeExecutionResolvers, iaResolvers, sabotajeResolvers, cajaNegraResolvers, rutaResolvers, leccionResolvers]);
 
 export { getUsuarioFromToken };
