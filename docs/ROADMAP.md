@@ -433,7 +433,7 @@ Quien empieza de cero se perdía: la teoría era un temario aparte y los ejercic
 - [x] **11 · Ruta y candados**: orden explícito por planeta en la BD, candados en la API y la web, planetas que se abren al terminar el anterior, bonus de planeta y migración de cuentas con progreso (M)
 - [x] **12 · Lecciones**: pantalla de lección (explicación, «Pruébalo», pregunta), sus puntos, y las 16 lecciones de Mercurio, Venus y Tierra (L)
 - [x] **13 · Contenido completo**: las 12 lecciones restantes, los 6 ejercicios nuevos y «qué practicas / por qué» en los 44 (L)
-- [ ] **14 · Biblioteca**: la Guía pasa a ser la biblioteca de lecciones vistas, más «Para ir más allá» (S)
+- [x] **14 · Biblioteca**: la Guía pasa a ser la biblioteca de lecciones vistas, más «Para ir más allá» (S)
 
 ---
 
