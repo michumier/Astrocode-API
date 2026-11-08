@@ -60,6 +60,8 @@ interface FiltroTareasInput {
   prioridad?: number;
 }
 
+const camposRuta = async (tareaId: any) => (await query('SELECT practica, porque FROM tareas WHERE id = $1', [tareaId]))[0];
+
 // Índice del reto de hoy dentro de la lista de retos diarios
 const indiceRetoDelDia = async (): Promise<number> => {
   const filas = await query(
@@ -83,6 +85,22 @@ export const tareaResolvers = {
       if (!parent.config) return null;
       const config = typeof parent.config === 'string' ? JSON.parse(parent.config) : parent.config;
       return config?.contexto || null;
+    },
+
+    // Ruta (fase 13). Las consultas de tareas no siempre traen estas columnas: si faltan, se leen
+    practica: async (parent: any) => (parent.practica !== undefined ? parent.practica : (await camposRuta(parent.id))?.practica ?? null),
+    porque: async (parent: any) => (parent.porque !== undefined ? parent.porque : (await camposRuta(parent.id))?.porque ?? null),
+    // La lección más cercana antes de esta tarea en su planeta (null si no está en la ruta o no hay ninguna antes)
+    leccionRepaso: async (parent: any) => {
+      const [l] = await query(
+        `SELECT l.id, l.titulo FROM ruta_pasos t
+         JOIN ruta_pasos r ON r.planeta = t.planeta AND r.orden < t.orden AND r.leccion_id IS NOT NULL
+         JOIN lecciones l ON l.id = r.leccion_id
+         WHERE t.tarea_id = $1
+         ORDER BY r.orden DESC LIMIT 1`,
+        [parent.id]
+      );
+      return l || null;
     },
 
     // Resolver para obtener la categoría de una tarea

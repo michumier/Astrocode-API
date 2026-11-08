@@ -25,7 +25,7 @@ async function alumno() {
   return r.data.login.token;
 }
 
-const RUTA = `{ ruta { clave estado hechos total bonus pasos { orden tipo estado tarea { id } leccion { id } } } }`;
+const RUTA = `{ ruta { clave estado hechos total bonus pasos { orden tipo estado tarea { id titulo } leccion { id } } } }`;
 const ENVIAR = `mutation($id:ID!,$c:String!){ enviarSolucion(tareaId:$id, codigo:$c, tiempoCompletado:30){
   correcto puntos planetaConquistado { clave nombre puntos } } }`;
 const enviar = (token, id, codigo) => gql(ENVIAR, { id: String(id), c: codigo }, token);
@@ -40,6 +40,21 @@ const MERCURIO = [
 ];
 
 const SOLUCION = Object.fromEntries(MERCURIO);
+// El final de Mercurio (fase 13) no tiene id fijo: se busca por título
+const INFORME = `tripulacion = int("6")
+combustible_gastado = 35.5 * 24
+combustible_restante = 1200 - combustible_gastado
+porcentaje_restante = round(combustible_restante / 1200 * 100, 1)
+raciones = 100 // tripulacion
+sobran = 100 % tripulacion
+combustible_inicial = 1200
+print("=== INFORME DE DESPEGUE: Kepler-7 ===")
+print(f"Tripulantes: {tripulacion}")
+print(f"Combustible gastado: {combustible_gastado} L")
+print(f"Combustible restante: {combustible_restante} L ({porcentaje_restante}%)")
+print(f"Raciones por tripulante: {raciones} (sobran {sobran})")
+`;
+const solucionDe = (tarea) => (tarea.titulo === 'Informe de despegue' ? INFORME : SOLUCION[tarea.id]);
 const RESPONDER = `mutation($id:ID!,$o:Int!){ responderLeccion(leccionId:$id, opcion:$o){ correcta puntos planetaConquistado { clave nombre puntos } } }`;
 
 // Responde una lección probando opciones hasta acertar (devuelve la respuesta buena)
@@ -58,14 +73,15 @@ test('la ruta: 6 planetas en orden con sus bonus; quien empieza solo tiene abier
     ['mercurio', 'abierto', 100], ['venus', 'bloqueado', 150], ['tierra', 'bloqueado', 200],
     ['marte', 'bloqueado', 250], ['jupiter', 'bloqueado', 300], ['saturno', 'bloqueado', 400],
   ]);
-  // Ejercicios + lecciones: Mercurio 4 + 5, Venus 6 + 5, Tierra 8 + 6 (el resto aún sin lecciones)
-  assert.deepEqual(data.ruta.map((p) => p.total), [9, 11, 14, 5, 10, 5]);
+  // Ejercicios + lecciones (fase 13: con los 6 ejercicios nuevos y las 28 lecciones)
+  assert.deepEqual(data.ruta.map((p) => p.total), [5 + 5, 7 + 5, 9 + 6, 6 + 4, 10 + 4, 7 + 4]);
   const pasos = data.ruta[0].pasos.map((s) => [s.tipo, s.tarea?.id ?? null, s.estado]);
   assert.deepEqual(pasos.map(([tipo, id]) => [tipo, id]), [
     ['leccion', null], ['leccion', null], ['tarea', '1'], ['leccion', null], ['tarea', '19'],
-    ['leccion', null], ['tarea', '4'], ['leccion', null], ['tarea', '2'],
+    ['leccion', null], ['tarea', '4'], ['leccion', null], ['tarea', '2'], ['tarea', pasos[9][1]],
   ]);
-  assert.deepEqual(pasos.map(([, , e]) => e), ['siguiente', ...Array(8).fill('bloqueado')]);
+  assert.equal(data.ruta[0].pasos[9].tarea.titulo, 'Informe de despegue');
+  assert.deepEqual(pasos.map(([, , e]) => e), ['siguiente', ...Array(9).fill('bloqueado')]);
 });
 
 test('no se puede saltar: ni abrir ni enviar un paso bloqueado, ni uno de un planeta cerrado', async () => {
@@ -94,20 +110,20 @@ test('paso a paso, lecciones incluidas, hasta conquistar Mercurio: bonus una sol
   for (const [i, s] of data.ruta[0].pasos.entries()) {
     ultimo = s.tipo === 'leccion'
       ? await completarLeccion(token, s.leccion.id)
-      : (await enviar(token, s.tarea.id, SOLUCION[s.tarea.id])).data.enviarSolucion;
+      : (await enviar(token, s.tarea.id, solucionDe(s.tarea))).data.enviarSolucion;
     assert.ok(ultimo.puntos > 0, `el paso ${i + 1} no ha dado puntos`);
     sumados += ultimo.puntos;
     if (i < data.ruta[0].pasos.length - 1) assert.equal(ultimo.planetaConquistado, null, `conquista antes de tiempo en el paso ${i + 1}`);
   }
   assert.deepEqual(ultimo.planetaConquistado, { clave: 'mercurio', nombre: 'Mercurio', puntos: 100 });
 
-  // Puntos: los de los 9 pasos más el bonus de Mercurio, una vez
+  // Puntos: los de los 10 pasos más el bonus de Mercurio, una vez
   const total = sumados + 100;
   assert.equal(await puntos(token), total);
 
   const despues = (await gql(RUTA, {}, token)).data;
   assert.equal(despues.ruta[0].estado, 'conquistado');
-  assert.equal(despues.ruta[0].hechos, 9);
+  assert.equal(despues.ruta[0].hechos, 10);
   assert.equal(despues.ruta[1].estado, 'abierto');
   assert.equal(despues.ruta[1].pasos[0].estado, 'siguiente');
 

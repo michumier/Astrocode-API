@@ -6,21 +6,23 @@ import { createRequire } from 'node:module';
 import { spawnSync } from 'node:child_process';
 
 const require = createRequire(import.meta.url);
-const { lecciones } = require('../../dist/db/seeds/lecciones.js');
+const { lecciones: fase12 } = require('../../dist/db/seeds/lecciones.js');
+const { leccionesFase13 } = require('../../dist/db/seeds/leccionesFase13.js');
+const lecciones = [...fase12, ...leccionesFase13];
 const { rutaInicial } = require('../../dist/db/seeds/ruta.js');
 
 const PYTHON = process.env.PYTHON || (process.platform === 'win32' ? 'python' : 'python3');
 
 const ejecutar = (codigo) => {
-  const r = spawnSync(PYTHON, ['-I', '-c', codigo], { encoding: 'utf8', timeout: 10000, env: { ...process.env, PYTHONIOENCODING: 'utf-8' } });
+  const r = spawnSync(PYTHON, ['-I', '-X', 'utf8', '-c', codigo], { encoding: 'utf8', timeout: 10000, env: { ...process.env, PYTHONIOENCODING: 'utf-8' } });
   return { salida: (r.stdout || '').replace(/\r\n/g, '\n').trim(), error: r.stderr || '', codigo: r.status };
 };
 
-test('hay 16 lecciones con clave única: 5 en Mercurio, 5 en Venus y 6 en la Tierra', () => {
-  assert.equal(lecciones.length, 16);
-  assert.equal(new Set(lecciones.map((l) => l.clave)).size, 16);
+test('hay 28 lecciones con clave única, repartidas como en el temario', () => {
+  assert.equal(lecciones.length, 28);
+  assert.equal(new Set(lecciones.map((l) => l.clave)).size, 28);
   const por = (p) => lecciones.filter((l) => l.planeta === p).length;
-  assert.deepEqual([por('mercurio'), por('venus'), por('tierra')], [5, 5, 6]);
+  assert.deepEqual(['mercurio', 'venus', 'tierra', 'marte', 'jupiter', 'saturno'].map(por), [5, 5, 6, 4, 4, 4]);
 });
 
 test('cada lección ocupa un hueco libre de la ruta (no choca con ningún ejercicio ni con otra lección)', () => {

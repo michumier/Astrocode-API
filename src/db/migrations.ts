@@ -8,6 +8,9 @@ import { ejerciciosRevisados, solucionArbolBinario } from './seeds/ejercicios';
 import { retosDiariosNuevos } from './seeds/retosDiariosNuevos';
 import { rutaInicial } from './seeds/ruta';
 import { lecciones } from './seeds/lecciones';
+import { leccionesFase13 } from './seeds/leccionesFase13';
+import { ejerciciosNuevos } from './seeds/ejerciciosNuevos';
+import { porques } from './seeds/porques';
 
 /*
  * Migraciones de la base de datos (Postgres desde la fase 8).
@@ -246,6 +249,64 @@ const migraciones: Migracion[] = [
         await conn.query("INSERT INTO ruta_pasos (planeta, orden, tipo, leccion_id) VALUES ($1, $2, 'leccion', $3)",
           [l.planeta, l.orden, nueva.id]);
       }
+      await conn.query(`
+        INSERT INTO lecciones_usuarios (usuario_id, leccion_id, completada_el, puntos)
+        SELECT DISTINCT tu.usuario_id, l.leccion_id, now(), 0
+        FROM ruta_pasos l
+        JOIN ruta_pasos t ON t.planeta = l.planeta AND t.orden > l.orden AND t.tarea_id IS NOT NULL
+        JOIN tareas_usuarios tu ON tu.tarea_id = t.tarea_id
+        WHERE l.leccion_id IS NOT NULL
+        ON CONFLICT DO NOTHING
+      `);
+    },
+  },
+  {
+    // Fase 13: las 12 lecciones de Marte, Júpiter y Saturno, los 6 ejercicios nuevos (los huecos del temario)
+    // y el «qué practicas / por qué» de cada ejercicio de la ruta.
+    id: '024_ruta_completa',
+    run: async (conn) => {
+      await conn.query('ALTER TABLE tareas ADD COLUMN practica TEXT NULL, ADD COLUMN porque TEXT NULL');
+
+      for (const l of leccionesFase13) {
+        const [nueva] = await conn.query(
+          'INSERT INTO lecciones (clave, titulo, bloques, pregunta) VALUES ($1, $2, $3, $4) RETURNING id',
+          [l.clave, l.titulo, JSON.stringify(l.bloques), JSON.stringify(l.pregunta)]
+        );
+        await conn.query("INSERT INTO ruta_pasos (planeta, orden, tipo, leccion_id) VALUES ($1, $2, 'leccion', $3)",
+          [l.planeta, l.orden, nueva.id]);
+      }
+
+      for (const e of ejerciciosNuevos) {
+        const existe = await conn.query('SELECT id FROM tareas WHERE titulo = $1', [e.titulo]);
+        if (existe.length) continue;
+        const [cat] = await conn.query('SELECT id FROM categorias WHERE nombre = $1', [e.categoria]);
+        const [niv] = await conn.query('SELECT id FROM niveles WHERE nombre = $1', [e.nivel]);
+        if (!cat || !niv) {
+          console.warn(`Ejercicio «${e.titulo}» omitido: no existe la categoría o el nivel`);
+          continue;
+        }
+        const [tarea] = await conn.query(
+          `INSERT INTO tareas (categoria_id, nivel_id, titulo, descripcion, codigo_base, resultado_esperado, solucion,
+                               puntos_base, tipo, practica, porque)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'codigo', $9, $10) RETURNING id`,
+          [cat.id, niv.id, e.titulo, e.descripcion, e.codigoBase, e.resultadoEsperado, e.solucion, e.puntos, e.practica, e.porque]
+        );
+        for (const [orden, t] of e.tests.entries()) {
+          await conn.query(
+            `INSERT INTO tests_tarea (tarea_id, descripcion, codigo_test, salida_esperada, oculto, orden)
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [tarea.id, t.descripcion, t.codigo || null, t.salida, !!t.oculto, orden]
+          );
+        }
+        await conn.query("INSERT INTO ruta_pasos (planeta, orden, tipo, tarea_id) VALUES ($1, $2, 'tarea', $3)",
+          [e.planeta, e.orden, tarea.id]);
+      }
+
+      for (const [id, { practica, porque }] of Object.entries(porques)) {
+        await conn.query('UPDATE tareas SET practica = $1, porque = $2 WHERE id = $3', [practica, porque, Number(id)]);
+      }
+
+      // Como en la 023: las lecciones nuevas que van antes de un ejercicio ya hecho cuentan como vistas, sin puntos
       await conn.query(`
         INSERT INTO lecciones_usuarios (usuario_id, leccion_id, completada_el, puntos)
         SELECT DISTINCT tu.usuario_id, l.leccion_id, now(), 0
